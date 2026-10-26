@@ -1,0 +1,6 @@
+LIBRARY "BoshiamyTsf"
+EXPORTS
+    DllGetClassObject
+    DllCanUnloadNow
+    BoshiamyTsf_GetClsid
+    BoshiamyTsf_GetProfileGuid

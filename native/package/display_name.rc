@@ -1,0 +1,7 @@
+// Stable resource ID for the Windows TSF profile's display-name binding.
+// Keep this ID associated with this exact text when localized names evolve.
+LANGUAGE 0, 0
+STRINGTABLE
+BEGIN
+    201 L"\x5638\xff0e\x6539"
+END

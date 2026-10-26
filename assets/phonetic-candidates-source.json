@@ -1,0 +1,33 @@
+{
+  "kind": "phonetic-runtime-candidate-asset-source",
+  "product_asset": true,
+  "filter_policy": "Preserve ordered official candidate strings only when their exact text occurs in Android section TRADITIONAL; emit one blank-text row for every reading with no eligible candidates.",
+  "official_fixture": {
+    "sha256": "71da17afc2e896132879a3a84fd00d3ff46012559837433550a465759c086ccf",
+    "manifest_sha256": "1484d110a96b3861ab272ade1b8069ebf0d07bab8bd466adfd2cb05a3f556601",
+    "fixture_sha256_pin": "71da17afc2e896132879a3a84fd00d3ff46012559837433550a465759c086ccf"
+  },
+  "universe": {
+    "sha256": "fe4f173aeaee16ba67a533c7621900286800fb6eeea3e52ecefb4e75eea7af68",
+    "query_count": 5975,
+    "unique_reading_count": 5975
+  },
+  "android_dictionary": {
+    "sha256": "e2457a8f88fbca1f529d8350f25cdd9d1ef2542d287c7c09f76d60d943f73261",
+    "traditional_text_count": 17966,
+    "path": "dictionary.tsv"
+  },
+  "generator": {
+    "sha256": "a4c4aa0b1f386f0b7f8cc5ca51fd906b007a9b9658c247ed9fff75bfd6b50e11"
+  },
+  "output": {
+    "sha256": "20a12dc8939556b3cf360e08871251be7a4f38f72eb02269756ea1fbfeb45ea8",
+    "format": "UTF-8 LF TSV with exact header reading<TAB>text; blank text is an empty candidate-list row",
+    "reading_rows": 5975,
+    "eligible_candidate_occurrences": 17972,
+    "excluded_official_only_occurrences": 3650,
+    "empty_eligible_reading_rows": 4644,
+    "path": "phonetic-candidates.tsv"
+  },
+  "ordinary_app_acceptance": false
+}

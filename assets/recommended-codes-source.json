@@ -1,0 +1,21 @@
+{
+  "schema": 1,
+  "source": {
+    "kind": "official-manual",
+    "file": "manual_j.pdf",
+    "sha256": "e7fde62e77d4b7c98dbc88353545a61ead19a50527775ecff9460711fecec9b9",
+    "page": 19
+  },
+  "evidence": "document",
+  "runtime_evidence": false,
+  "coverage": "incomplete",
+  "entries": 2,
+  "sections": [
+    "TRADITIONAL",
+    "SIMPLIFIED",
+    "TW_SIMPLIFIED",
+    "JAPANESE"
+  ],
+  "asset_sha256": "f5e9ee588a265dbec7bf00c3baa24ccfd6073e4a9a00fe08d999e6a01a895346",
+  "scope": "Document-backed Traditional 蝦→cofu (page 19 explicit text) and 嘸→ovff (page 19 figure); no inferred recommendations for other characters or modes"
+}

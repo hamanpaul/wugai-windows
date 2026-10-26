@@ -1,0 +1,731 @@
+{
+  "format": "liukai-public-source-v1",
+  "version": "0.0.0-dev.20261026.r60.machine-com-x64",
+  "prepared_utc": "2026-10-26T09:18:56.088665+00:00",
+  "source_commit": "2fea4b8",
+  "acceptance": "R60-user-verified-Search-Store-and-mode",
+  "installer_sha256": "b65fa61ff1fc26580c603dd82093c0081d3d097c06a0ccdad8d0c4803fd3bda4",
+  "production_entrypoints": [
+    "native/tsf/service.cpp",
+    "native/tools/lookup_main.cpp",
+    "native/tools/settings_main.cpp",
+    "native/tools/register_main.cpp",
+    "native/installer/lifecycle_main.cpp"
+  ],
+  "production_source_file_count": 93,
+  "test_entry_file_count": 20,
+  "export_edits": {
+    "native/build-branding.ps1": {
+      "source_sha256": "40eb7b4565582ad6faed8612e55c1355e49db8ab355fea647921c86bb73851af",
+      "export_sha256": "5f5da5be6deff60ce37bc576f5338278334c1e1a7794a7f317df2bf6f1c4ca5d",
+      "description": "Use standard optional MSYS2 compiler path and default branding architecture to x64. Product C++ is unchanged."
+    },
+    "native/toolchain.py": {
+      "source_sha256": "bc0cff2d6dde8b507efe32665d22075f96ac0e048fa46796fd33c3996ecaeecb",
+      "export_sha256": "83ce78cfa8eaf3dbed31938981869c96081106045b4794633d79355426c5b79c",
+      "description": "Replace a machine-specific optional compiler default with the standard MSYS2 location. Only x64 is supported by this release."
+    }
+  },
+  "origins": {
+    "THIRD_PARTY_NOTICES.md": {
+      "kind": "source",
+      "source_sha256": "0a3749fba35b9c19f108748d343c35eb447d5aa2753b1d4e2ecab034cbe25c1d"
+    },
+    "assets/liukai.ico": {
+      "kind": "source",
+      "source_sha256": "24a8e4ac218ca0c229fdae0907892a39bbbb943e1963b6e08da269a7844bf630"
+    },
+    "native/associated_phrases.hpp": {
+      "kind": "source",
+      "source_sha256": "b40489328e594ab863d57dc0be4743a135035217b90fb2c2d23e5f496bb847d8"
+    },
+    "native/build-branding.ps1": {
+      "kind": "source",
+      "source_sha256": "40eb7b4565582ad6faed8612e55c1355e49db8ab355fea647921c86bb73851af"
+    },
+    "native/composition_display.hpp": {
+      "kind": "source",
+      "source_sha256": "e12564bfaa0ca93216792dce3088f95bc8037b4bf2406d3ac7ccf3556f211d4a"
+    },
+    "native/cp950.hpp": {
+      "kind": "source",
+      "source_sha256": "85c57dd0e25dffa77273842d63030b1ff4f477f4c959d7f2a0cd53d64049f270"
+    },
+    "native/dictionary.hpp": {
+      "kind": "source",
+      "source_sha256": "3766db9c0244fee0f1ddf15b41f17922acba35f95f85e54489d78a121e94cfa3"
+    },
+    "native/engine.hpp": {
+      "kind": "source",
+      "source_sha256": "998fb054a12ae4116eef513d32581327b7f9da36d481948f690e0a659d6fec6c"
+    },
+    "native/extension_filter.hpp": {
+      "kind": "source",
+      "source_sha256": "7fd0745963bb1b215a059c87c0d287f04c0559b4133300922f7457b287b4e70c"
+    },
+    "native/install-release.ps1": {
+      "kind": "source",
+      "source_sha256": "b4b5248bf4b894cfa1b4673ed09887ac96cc576b17c25d29a44d9fec453f62a3"
+    },
+    "native/installer/command_line.hpp": {
+      "kind": "source",
+      "source_sha256": "d26652886d1d99454df69f4e4d57326770513b937a376bc7f54626a339fd7429"
+    },
+    "native/installer/deployment_access_preflight.hpp": {
+      "kind": "source",
+      "source_sha256": "7c84c11c8e11818d1584590dee29d97174d800d620cf33bec6fff290581f8fdd"
+    },
+    "native/installer/deployment_coordinator.hpp": {
+      "kind": "source",
+      "source_sha256": "8accf38f90916be55cb2372eee27ed7e0a6acb866c39f6149889a0daee43baaa"
+    },
+    "native/installer/deployment_recovery.hpp": {
+      "kind": "source",
+      "source_sha256": "5a87be9e900e6691f11efcfca0467140c23f8bcd5bfc7049aec326de4d08abd4"
+    },
+    "native/installer/dev_host_migration.hpp": {
+      "kind": "source",
+      "source_sha256": "a844a96e1ba4481780f61f101612e36981652f9d407b4f15aafb98f5a193390e"
+    },
+    "native/installer/dev_host_migration_history.hpp": {
+      "kind": "source",
+      "source_sha256": "8d31f8ae3c9fc9e56467874a0f55efdd2ead838e8631861d4e0fc78a402c45c6"
+    },
+    "native/installer/dev_host_migration_inspection_command.hpp": {
+      "kind": "source",
+      "source_sha256": "c0ebc76756fc912c1bd7c3a8e60a83fc7aa854ee37505317a9807bb1b8d98b2e"
+    },
+    "native/installer/dev_host_migration_recovery.hpp": {
+      "kind": "source",
+      "source_sha256": "3338d56edd75f1bdc718dc5c1e694fcbbb492bd5447ee20da55c136c66f6662d"
+    },
+    "native/installer/dev_host_migration_rollback.hpp": {
+      "kind": "source",
+      "source_sha256": "4acefd5f3843827405d54297f934767a4cc225892bd7a25dee51e9293380496a"
+    },
+    "native/installer/dev_host_migration_rollback_command.hpp": {
+      "kind": "source",
+      "source_sha256": "4d67ec3cf88c93b48cd89788243d7ae142448c8dee6f4c1182b9e4b26aa70a5a"
+    },
+    "native/installer/dev_host_package_migration.hpp": {
+      "kind": "source",
+      "source_sha256": "24131973f5630cb0ecc5fd31b5ee652c962a8951eb255b2dfcc773b19a2138f7"
+    },
+    "native/installer/dual_architecture_transaction.hpp": {
+      "kind": "source",
+      "source_sha256": "9f6e6452a64b865cfe028c3333fec776efa00a2a5b451d9c78c38c7fc1825bd5"
+    },
+    "native/installer/durable_cli_session.hpp": {
+      "kind": "source",
+      "source_sha256": "613e831fe50ae76065c763acaa7020a2a59c8f09f4b99b37bd70fa2c576c4887"
+    },
+    "native/installer/durable_compensation_marker.hpp": {
+      "kind": "source",
+      "source_sha256": "2a001283a892748583816050934baf8f59f0855d270ec6fd47df07bb8e6dffff"
+    },
+    "native/installer/durable_deployment_recovery.hpp": {
+      "kind": "source",
+      "source_sha256": "8018d51271c7cbe13dfc41b82227fb32a46af6a88dbe397290acc41bdacc9430"
+    },
+    "native/installer/durable_journal.hpp": {
+      "kind": "source",
+      "source_sha256": "0492c03352125da3a28458084ec255251da0a07ea76e67a070e428823e19b8bd"
+    },
+    "native/installer/durable_transaction_observer.hpp": {
+      "kind": "source",
+      "source_sha256": "e97c3bceae19a53bd4b17b4e2121bae74eb68d48b4ed30d8720ec3383776ac53"
+    },
+    "native/installer/durable_transaction_snapshot.hpp": {
+      "kind": "source",
+      "source_sha256": "5ed0577cddac429743edba450f901bd83b1280e036d9215176b690021d3ce210"
+    },
+    "native/installer/file_deployment.hpp": {
+      "kind": "source",
+      "source_sha256": "4112af14eb8073535e55b53075690f54383cc4247b4880e2d3fdb8643f87307b"
+    },
+    "native/installer/lifecycle_main.cpp": {
+      "kind": "source",
+      "source_sha256": "037c3d125160395f040592ef3f20a2b5aff5e56a4984e47432760f8ebcdb2e40"
+    },
+    "native/installer/profile_display_backend.hpp": {
+      "kind": "source",
+      "source_sha256": "8a6928ae378a8e4239b1b67a6441ce4ea87249f43f4d32ea5cf1f9cd2a2f2893"
+    },
+    "native/installer/profile_display_health.hpp": {
+      "kind": "source",
+      "source_sha256": "bf871db08377b3303683a1f5040144ed48ff22d384d51148e7b66e8d24475ffa"
+    },
+    "native/installer/profile_display_mutation.hpp": {
+      "kind": "source",
+      "source_sha256": "a0b6e065eb59cb10d1eee9e28e8695aa7741f965a21f6530505a271557fe09c6"
+    },
+    "native/installer/profile_display_payload.hpp": {
+      "kind": "source",
+      "source_sha256": "4b94f698085e649aaa5b8fa12ebf3f12fd8fa2ca1b4498425a5df8816c647e59"
+    },
+    "native/installer/profile_display_plan.hpp": {
+      "kind": "source",
+      "source_sha256": "111fcd41f49aae804163d9fb30e72e844d805af1f0d04f925e740cf87c3c97c5"
+    },
+    "native/installer/profile_display_registry.hpp": {
+      "kind": "source",
+      "source_sha256": "0f6e7db2f74f797860f572a8767c12d07086ff43614d0b03ddd69560098311e4"
+    },
+    "native/installer/profile_display_repair.hpp": {
+      "kind": "source",
+      "source_sha256": "dfc1d951341e9659cbc5d9842657c0da09d7975e780527bf8e99cc895c2ea6fb"
+    },
+    "native/installer/profile_display_snapshot.hpp": {
+      "kind": "source",
+      "source_sha256": "1eadeb3150f1c15535800916a04712a6455b6d09a86a64e5bef8ed20174bced0"
+    },
+    "native/installer/tray_status.hpp": {
+      "kind": "source",
+      "source_sha256": "507f6a9d0d542a5af79aa7883bd3dd2f1014c2f40f267e2ae2acd96b0b1840ed"
+    },
+    "native/installer/tsf_shared_store.hpp": {
+      "kind": "source",
+      "source_sha256": "791cf99eda895fa3aa9fab0878536c4164f61b4710916fe6d08abf5cce439c41"
+    },
+    "native/installer/windows_backend.hpp": {
+      "kind": "source",
+      "source_sha256": "70faa50d4bb155400c62ce5bb1501612f11c69faee28c8b7b10c8c66b1f6987b"
+    },
+    "native/installer/windows_profile_display_access.hpp": {
+      "kind": "source",
+      "source_sha256": "9cd84ef9061cce32a7f67a85e2518d3419a1680b7a870914ace1bd6b9e586b81"
+    },
+    "native/installer/windows_profile_display_repair.hpp": {
+      "kind": "source",
+      "source_sha256": "f158b0e37d025ec5405508be1018cd29fbe7178c53eac8faf8d42f26c997f763"
+    },
+    "native/keyboard_modes.hpp": {
+      "kind": "source",
+      "source_sha256": "410b7e19e4037d34256e079badd46045e22f47309ddb6f55363854b036bee470"
+    },
+    "native/lookup.hpp": {
+      "kind": "source",
+      "source_sha256": "881c0ea7855838632d9291f9756533af76ea1439380acbf410b028af4021e4a3"
+    },
+    "native/modes.hpp": {
+      "kind": "source",
+      "source_sha256": "41c93c03dba13467dc4e176768da8838bd726d68f3f7b221a3f6bf37309802ba"
+    },
+    "native/observed_primary_homophones.hpp": {
+      "kind": "source",
+      "source_sha256": "41fca6170b7e9477349dda7c604eeb40f824cd99ba746d5b83a2e6839081154c"
+    },
+    "native/observed_primary_homophones_data.hpp": {
+      "kind": "source",
+      "source_sha256": "2b9cc88b1c19e408a3b5f4249e5b17c7afabac77c7367a097bfde6d88c5a35c9"
+    },
+    "native/package-install-windows.ps1": {
+      "kind": "source",
+      "source_sha256": "16624a5fac92b837af94e8f1a1df12ae62d82c037d1035c62411a4f6f16c0711"
+    },
+    "native/package-windows.ps1": {
+      "kind": "source",
+      "source_sha256": "827b46e738ef7f2ec8f93f0c2801bd77b9d9736bad1696ce40dcba383d8a7d13"
+    },
+    "native/package/Setup.cs": {
+      "kind": "source",
+      "source_sha256": "42aef22918f4f2d65f01e4d3f5a22daca3cc775f3ff1affaa67f6ca12c968f8c"
+    },
+    "native/package/branding.rc": {
+      "kind": "source",
+      "source_sha256": "36b43e9fc8c1a136fe511a9e8571e6a8426a21cae5bd88f58d8532ceaceebf42"
+    },
+    "native/package/display_name.rc": {
+      "kind": "source",
+      "source_sha256": "a0d8c6451883ac417bca17427ad0581c5a1dc7526f58279fdcced071b64c2f41"
+    },
+    "native/phonetic_candidates.hpp": {
+      "kind": "source",
+      "source_sha256": "96cf394eeeacafbb03e204cd1d64a1748b64d7a81ca5b824ed79252ecef57689"
+    },
+    "native/readings.hpp": {
+      "kind": "source",
+      "source_sha256": "7a27531434e8ccce95fe0d2cad25284df085dfc7ec2b47eb262396be2fc6493b"
+    },
+    "native/recommended_codes.hpp": {
+      "kind": "source",
+      "source_sha256": "78bc274ac3ee756ad9fd95e69ba14ae42d2dbf28f7dbb11eb67ee7eb0b1e9381"
+    },
+    "native/settings.hpp": {
+      "kind": "source",
+      "source_sha256": "00cab97fa6f32ff9e1f6f5c9d9fce24799a90dd838f3df22c81662309409cd50"
+    },
+    "native/shift_toggle.hpp": {
+      "kind": "source",
+      "source_sha256": "c83aa6389307910a817026d9f0e30e196a42fc0346b375f1f86de37e0ba309ce"
+    },
+    "native/tests/com_registration_tests.cpp": {
+      "kind": "source",
+      "source_sha256": "cd7d36d1709cf1076eef5da745717c0987e58a611cf63195d9b6a873ff021c5d"
+    },
+    "native/tests/install-release-readback-tests.ps1": {
+      "kind": "source",
+      "source_sha256": "de75f9b51e1fbca614647b98907e68ffbd7f3e7846d4a0a60ac65b5c8e37478f"
+    },
+    "native/tests/installer_command_line_tests.cpp": {
+      "kind": "source",
+      "source_sha256": "e50975cbe311e93134e749ed8d7f3cd3df8103524afc2ae13b8c686a66f93e15"
+    },
+    "native/tests/installer_deployment_coordinator_tests.cpp": {
+      "kind": "source",
+      "source_sha256": "0b4bad48bac7e899223f9b6deaa3ef30dea2ef4883ceaa55ae08fb938bce52e3"
+    },
+    "native/tests/installer_dev_host_migration_tests.cpp": {
+      "kind": "source",
+      "source_sha256": "21dcb309587b22fc872ff7dd914b7f8b458add3abd836050d03af9494969ead3"
+    },
+    "native/tests/installer_dev_host_programfiles_migration_tests.cpp": {
+      "kind": "source",
+      "source_sha256": "ca8b1330c13c39c02d19eecb53e090a132f464fce25aedecd515cee8e85bcb28"
+    },
+    "native/tests/installer_dual_architecture_tests.cpp": {
+      "kind": "source",
+      "source_sha256": "2ceae4e487385419e68bdbb103cf6ba22664150c628e3113331aba799ca9ce92"
+    },
+    "native/tests/installer_durable_cli_tests.cpp": {
+      "kind": "source",
+      "source_sha256": "d4f5d5016d72a199c6e3b6d26a1e1edabce7e3d372bd89aeca72fb8774124342"
+    },
+    "native/tests/installer_durable_singleton_recovery_tests.cpp": {
+      "kind": "source",
+      "source_sha256": "9b017e5b5c91a7cd44fefbeb4cf851b8b15577d1e862054efec3174bbf2e66fe"
+    },
+    "native/tests/installer_durable_transaction_observer_tests.cpp": {
+      "kind": "source",
+      "source_sha256": "2d07d015c7494c81d75cb17f928ebc0aa1f8e3c3a0dc953409af1c1850dfb648"
+    },
+    "native/tests/installer_durable_transaction_snapshot_tests.cpp": {
+      "kind": "source",
+      "source_sha256": "56dfc9cc2aa62e167b56e63e1f4b77aed74794d791c249b55b87bfe5a11d7960"
+    },
+    "native/tests/installer_package_cli_tests.cpp": {
+      "kind": "source",
+      "source_sha256": "5f18eaf5bf8270e4cac0b3ca6af34890c4d12e2bec4e95230788d4d1c7911358"
+    },
+    "native/tests/installer_status_report_tests.cpp": {
+      "kind": "source",
+      "source_sha256": "841af12f19211a31f8d2c1cf2c03801e6337a07e5ce273f64d573cb7074dd5b6"
+    },
+    "native/tests/installer_windows_backend_tests.cpp": {
+      "kind": "source",
+      "source_sha256": "423739cb8d2095db1b82f85281a0704e66040400aa11971ffc98ba8c5df27acb"
+    },
+    "native/tests/language_bar_mode_icon_tests.cpp": {
+      "kind": "source",
+      "source_sha256": "1289518c8bfe9d5bc1dc85d482fbca5a6f101a92cb029f06c33e80153eab8bb5"
+    },
+    "native/tests/language_bar_tests.cpp": {
+      "kind": "source",
+      "source_sha256": "9d9bcc394ff20a6099843e33798b5f5f1cfebfeb9442605bc7acb601cd8429c1"
+    },
+    "native/tests/modern_host_registration_oracle_tests.cpp": {
+      "kind": "source",
+      "source_sha256": "630d99a035804cba1bd5a75554442c9d7df5c026e738104c942ffdfa696d69c5"
+    },
+    "native/tests/package-install-windows-tests.ps1": {
+      "kind": "source",
+      "source_sha256": "0e025645c18efeaef5eec838857634a58aeabd38da4bbd3c94eb1c21f920c383"
+    },
+    "native/tests/tsf_conversion_tests.cpp": {
+      "kind": "source",
+      "source_sha256": "56263d5e9fa447cbe08f55089e98d447266d8b2336f51f24cf00b9ac536cdf99"
+    },
+    "native/tests/tsf_language_bar_tests.cpp": {
+      "kind": "source",
+      "source_sha256": "e828d796e7d4637e50a352073e06f07683b3fc6bf5d881ccbf34ac40623d8987"
+    },
+    "native/toolchain.py": {
+      "kind": "source",
+      "source_sha256": "bc0cff2d6dde8b507efe32665d22075f96ac0e048fa46796fd33c3996ecaeecb"
+    },
+    "native/tools/lookup_main.cpp": {
+      "kind": "source",
+      "source_sha256": "0a11582a63a6c03eb2f4b40eecc7150984c5fcc3f3002463474e25c8ee2e6f54"
+    },
+    "native/tools/lookup_window.hpp": {
+      "kind": "source",
+      "source_sha256": "f3c3861d45f8ef85a5cd259cebfd76f43189a888a670c50c483469a1964df8e7"
+    },
+    "native/tools/register_main.cpp": {
+      "kind": "source",
+      "source_sha256": "7932cd78322ac589518fee631fbe46f4fd999aa2f32d11c617cf8f4c09d52001"
+    },
+    "native/tools/root_chart.hpp": {
+      "kind": "source",
+      "source_sha256": "2a93424bc0fe3a841eb31ab532055566b6b34de2fa0140a7d0f1bb9315b83994"
+    },
+    "native/tools/root_chart_eg_sound_glyph_render.hpp": {
+      "kind": "source",
+      "source_sha256": "eb2beee34b3ab6a1bfca6cfcc85341ca9a8128be9d1a2a676790dfabe96552b8"
+    },
+    "native/tools/root_chart_eg_sound_glyphs.hpp": {
+      "kind": "source",
+      "source_sha256": "ec41ac86748cb8a3f181a7203715768f44225a3929e37b470a26dee116f3a30e"
+    },
+    "native/tools/root_chart_f_meaning_glyph_render.hpp": {
+      "kind": "source",
+      "source_sha256": "30307dcc14ff5c48910d0b5c6d98e487a8fc1bbcbba5df1f38430bab9589e621"
+    },
+    "native/tools/root_chart_f_meaning_glyphs.hpp": {
+      "kind": "source",
+      "source_sha256": "7759d2f29b245c543ff1e08c5430fc1ff396466b9bde37317820b00facaec07f"
+    },
+    "native/tools/root_chart_f_sound_glyph_render.hpp": {
+      "kind": "source",
+      "source_sha256": "2ac1ba38494ceffd0653c3fd1ec9f4ebb53fe43400ccfe266200bf91d5cd768f"
+    },
+    "native/tools/root_chart_f_sound_glyphs.hpp": {
+      "kind": "source",
+      "source_sha256": "8ffc03cc7e6db27d229733bfa4891367e2906c2e7f9beb6f46404afe2f6a95ad"
+    },
+    "native/tools/root_chart_k_meaning_glyph_render.hpp": {
+      "kind": "source",
+      "source_sha256": "ef6ec5589771bc18a41e4537ab118a1cdcfe2a3e19426322bf140d7d0a7f705b"
+    },
+    "native/tools/root_chart_k_meaning_glyphs.hpp": {
+      "kind": "source",
+      "source_sha256": "6c0393a07748bbad7fe99bbe6120de5442051708c75f3b875ad5ff0711b9e688"
+    },
+    "native/tools/root_chart_q7_glyph.hpp": {
+      "kind": "source",
+      "source_sha256": "ec8ddbc3354efa97f5b37823cb601d3c5330500dfcff9171bdc836d39aba37d0"
+    },
+    "native/tools/root_chart_q7_render.hpp": {
+      "kind": "source",
+      "source_sha256": "87f376fe38bb9c9a21938e415e793136efc8183c2bef4191ad146257cc49aa08"
+    },
+    "native/tools/root_chart_qglyph_render.hpp": {
+      "kind": "source",
+      "source_sha256": "f9ed3eeafa3e4e6c9f50cf5e459c1e48c50860d285b5a55a0424a7c83e6a0280"
+    },
+    "native/tools/root_chart_qglyphs.hpp": {
+      "kind": "source",
+      "source_sha256": "e285a4d7dc2007178c8951b7caa2f0c147d87ddd4b2eb2a110773ca323efc71f"
+    },
+    "native/tools/root_chart_rs_glyph_render.hpp": {
+      "kind": "source",
+      "source_sha256": "e2310866d04a7a561ed167d15632e51e543a021766b58e0e170b43391c391c71"
+    },
+    "native/tools/root_chart_rs_glyphs.hpp": {
+      "kind": "source",
+      "source_sha256": "c6dcc1b169f7e9ca3b698cabfcdb06be968e6b6b29e81c4df8a7db552196f346"
+    },
+    "native/tools/root_chart_shape_glyph_render.hpp": {
+      "kind": "source",
+      "source_sha256": "baad80444dca306dcb095c6351e4a6bd2ba33b781d0f5604967ad79b2e51f0ac"
+    },
+    "native/tools/root_chart_shape_glyphs.hpp": {
+      "kind": "source",
+      "source_sha256": "57035dbbc08ed642c164119a72c361b67e0d8d84de2d343fc1f8e74981024d16"
+    },
+    "native/tools/root_chart_t_meaning_glyph_render.hpp": {
+      "kind": "source",
+      "source_sha256": "b8220d5815abb2c1d95868eb320312fad91bf8015366ddeeb4801588a827cd38"
+    },
+    "native/tools/root_chart_t_meaning_glyphs.hpp": {
+      "kind": "source",
+      "source_sha256": "058c195d9112f4b206c4430f3626c4a5a0cf94172c1b17069617823e9e922d9b"
+    },
+    "native/tools/root_chart_window.hpp": {
+      "kind": "source",
+      "source_sha256": "dd8811da0129686436ed326689569531c1911e9dc774ef19a2d7d93f04a90866"
+    },
+    "native/tools/settings_main.cpp": {
+      "kind": "source",
+      "source_sha256": "a9247db5018a0073c03c1fce571cf7c0ef60e0e6db5e22e45ee37451b3d67290"
+    },
+    "native/tools/settings_window.hpp": {
+      "kind": "source",
+      "source_sha256": "4dc339cf2a3940c6d5c55857fa517023de3954b51ce8634569234090f2337e10"
+    },
+    "native/tsf/activation_diagnostics.hpp": {
+      "kind": "source",
+      "source_sha256": "c47d0bc3fc25741c0067d827f51096123d8bab8ce287d781961f03d732c27851"
+    },
+    "native/tsf/candidate_ui_element.hpp": {
+      "kind": "source",
+      "source_sha256": "64a5a6e2ee2c9cce2ed14e12980d2e74b4a3b5782a5d006c30045d3190639255"
+    },
+    "native/tsf/candidate_window.hpp": {
+      "kind": "source",
+      "source_sha256": "99fa6aa5c5e05a5d6ce90cf69dec00281087549ae6f982471342b7b0283e6501"
+    },
+    "native/tsf/com_registration.hpp": {
+      "kind": "source",
+      "source_sha256": "0a80a9d4ae7991c35e763b79e93d608dc3eddc2fd68ba5e166b31bee3796da83"
+    },
+    "native/tsf/compartment_ids.hpp": {
+      "kind": "source",
+      "source_sha256": "7bc22321d96412232f7da01b2aabac343b21ec4d41cb6efffa1904725041022f"
+    },
+    "native/tsf/language_bar.hpp": {
+      "kind": "source",
+      "source_sha256": "b3a2423548211a2f2480842cfd784273463f8e9d5b94863d12c54afd71403b05"
+    },
+    "native/tsf/mode_icon.hpp": {
+      "kind": "source",
+      "source_sha256": "116845916ee3ad80ab1a2c2c3ed9b9f27958167c62f411c5cf315e534d87311f"
+    },
+    "native/tsf/open_close_binding.hpp": {
+      "kind": "source",
+      "source_sha256": "7ccb2d223d7a131f8960256951bd86a70038909a3818c4da3c3971113c61e3b6"
+    },
+    "native/tsf/preserved_keys.hpp": {
+      "kind": "source",
+      "source_sha256": "b3dcff4079b9f555f0447877ad0ac3526144d6d1aba73d44b2ab450e498fd373"
+    },
+    "native/tsf/profile_display_name_resource.hpp": {
+      "kind": "source",
+      "source_sha256": "d4a4e835b276e36d7ae75310b46fd2938846e033224edf1a3cf82f132c555e5d"
+    },
+    "native/tsf/profile_display_update.hpp": {
+      "kind": "source",
+      "source_sha256": "1c8d39293b43871dfb0f99642aa874bc5a9fc3c81811433b0e318793e1e3eb1a"
+    },
+    "native/tsf/profile_icon_relocation.hpp": {
+      "kind": "source",
+      "source_sha256": "113651531961546f43b3c773e3a2d29c80928f6d6b944659bfea16a8d9ea2c6d"
+    },
+    "native/tsf/registration_diagnostics.hpp": {
+      "kind": "source",
+      "source_sha256": "f7134c3b4cb84c0018e2cb51920e6279da8481057f838def49f4b14407299e77"
+    },
+    "native/tsf/registration_plan.hpp": {
+      "kind": "source",
+      "source_sha256": "3f7c8a7badb22b6eb3210da1249e716f7fe488d9e4875075f1e70d7c2683d149"
+    },
+    "native/tsf/resources.rc": {
+      "kind": "source",
+      "source_sha256": "8de287373a785547b8a4a93993119b2ee32f2264e19f6c68dac05495fc582563"
+    },
+    "native/tsf/runtime_diagnostics.hpp": {
+      "kind": "source",
+      "source_sha256": "4d56e1ff40ccd62f81c539e4d894335b03caf21c67e5b8a9e85a04164f33d078"
+    },
+    "native/tsf/service.cpp": {
+      "kind": "source",
+      "source_sha256": "e9a6c1a16f8fe3bfed60d64218cbc86010aa83fba61b31e363e5c5570f527106"
+    },
+    "native/tsf/service.def": {
+      "kind": "source",
+      "source_sha256": "b09c33bec2d5197fff19567f58cf542243914aa34716918a6d97d55b7288877f"
+    },
+    "native/tsf/text_layout.hpp": {
+      "kind": "source",
+      "source_sha256": "3f55d255bd8febedfbb821e7d0acc99550235c78793bd8bf0dd404d54be38ba9"
+    },
+    "native/tsf/windows_profile_display_update.hpp": {
+      "kind": "source",
+      "source_sha256": "afa4f0a5af0be3bd69e929870620d3404f30be9df7fd6ba7cd84a97a0a873dd3"
+    },
+    "native/tsf/windows_registration.hpp": {
+      "kind": "source",
+      "source_sha256": "5a1e4ceb5adf54819311aaf10dada90c034947eb85b4f619f51379b4c45ad786"
+    },
+    "native/user_profile_enable.hpp": {
+      "kind": "source",
+      "source_sha256": "b6f1bce9e283e9fcb9884c39a08f0703027f5964883e0017d6b490caa91125dc"
+    },
+    "native/zhuyin_keyboard.hpp": {
+      "kind": "source",
+      "source_sha256": "8b3ee2ebd8ab7f541afd731e09cfbc1a37f15bff213ead736f205d2189d144c4"
+    },
+    "assets/dictionary.tsv": {
+      "kind": "verified-r60-runtime-data",
+      "source_sha256": "e2457a8f88fbca1f529d8350f25cdd9d1ef2542d287c7c09f76d60d943f73261"
+    },
+    "assets/phonetic-candidates-source.json": {
+      "kind": "verified-r60-runtime-data",
+      "source_sha256": "19eed3402462b12e7fd843c7efb5c6397d069a4e55c3fe2ab243aac605da7205"
+    },
+    "assets/phonetic-candidates.tsv": {
+      "kind": "verified-r60-runtime-data",
+      "source_sha256": "20a12dc8939556b3cf360e08871251be7a4f38f72eb02269756ea1fbfeb45ea8"
+    },
+    "assets/readings.tsv": {
+      "kind": "verified-r60-runtime-data",
+      "source_sha256": "ab0b60a455e5d07baad8c4384c43d234e9343b8af919d142f5c8e16e8cba2334"
+    },
+    "assets/recommended-codes-source.json": {
+      "kind": "verified-r60-runtime-data",
+      "source_sha256": "7173c1818d7602e18810ce52a3e906fc67ad216a8003be7583ed3113d45280f3"
+    },
+    "assets/recommended-codes.tsv": {
+      "kind": "verified-r60-runtime-data",
+      "source_sha256": "f5e9ee588a265dbec7bf00c3baa24ccfd6073e4a9a00fe08d999e6a01a895346"
+    },
+    "assets/THIRD_PARTY_NOTICES.md": {
+      "kind": "verified-r60-runtime-data",
+      "source_sha256": "0a3749fba35b9c19f108748d343c35eb447d5aa2753b1d4e2ecab034cbe25c1d"
+    }
+  },
+  "files": {
+    ".gitignore": "e18d132d26da73529b6a762729307072c6a6eab6300eb584fed33a2ffb2bd45c",
+    "README.md": "66863b7e38eb43725bffe6062789240eea88b66b0e3c2375fe103d20c776bc57",
+    "THIRD_PARTY_NOTICES.md": "0a3749fba35b9c19f108748d343c35eb447d5aa2753b1d4e2ecab034cbe25c1d",
+    "assets/THIRD_PARTY_NOTICES.md": "0a3749fba35b9c19f108748d343c35eb447d5aa2753b1d4e2ecab034cbe25c1d",
+    "assets/dictionary.tsv": "e2457a8f88fbca1f529d8350f25cdd9d1ef2542d287c7c09f76d60d943f73261",
+    "assets/liukai.ico": "24a8e4ac218ca0c229fdae0907892a39bbbb943e1963b6e08da269a7844bf630",
+    "assets/phonetic-candidates-source.json": "19eed3402462b12e7fd843c7efb5c6397d069a4e55c3fe2ab243aac605da7205",
+    "assets/phonetic-candidates.tsv": "20a12dc8939556b3cf360e08871251be7a4f38f72eb02269756ea1fbfeb45ea8",
+    "assets/readings.tsv": "ab0b60a455e5d07baad8c4384c43d234e9343b8af919d142f5c8e16e8cba2334",
+    "assets/recommended-codes-source.json": "7173c1818d7602e18810ce52a3e906fc67ad216a8003be7583ed3113d45280f3",
+    "assets/recommended-codes.tsv": "f5e9ee588a265dbec7bf00c3baa24ccfd6073e4a9a00fe08d999e6a01a895346",
+    "native/associated_phrases.hpp": "b40489328e594ab863d57dc0be4743a135035217b90fb2c2d23e5f496bb847d8",
+    "native/build-branding.ps1": "5f5da5be6deff60ce37bc576f5338278334c1e1a7794a7f317df2bf6f1c4ca5d",
+    "native/composition_display.hpp": "e12564bfaa0ca93216792dce3088f95bc8037b4bf2406d3ac7ccf3556f211d4a",
+    "native/cp950.hpp": "85c57dd0e25dffa77273842d63030b1ff4f477f4c959d7f2a0cd53d64049f270",
+    "native/dictionary.hpp": "3766db9c0244fee0f1ddf15b41f17922acba35f95f85e54489d78a121e94cfa3",
+    "native/engine.hpp": "998fb054a12ae4116eef513d32581327b7f9da36d481948f690e0a659d6fec6c",
+    "native/extension_filter.hpp": "7fd0745963bb1b215a059c87c0d287f04c0559b4133300922f7457b287b4e70c",
+    "native/install-release.ps1": "b4b5248bf4b894cfa1b4673ed09887ac96cc576b17c25d29a44d9fec453f62a3",
+    "native/installer/command_line.hpp": "d26652886d1d99454df69f4e4d57326770513b937a376bc7f54626a339fd7429",
+    "native/installer/deployment_access_preflight.hpp": "7c84c11c8e11818d1584590dee29d97174d800d620cf33bec6fff290581f8fdd",
+    "native/installer/deployment_coordinator.hpp": "8accf38f90916be55cb2372eee27ed7e0a6acb866c39f6149889a0daee43baaa",
+    "native/installer/deployment_recovery.hpp": "5a87be9e900e6691f11efcfca0467140c23f8bcd5bfc7049aec326de4d08abd4",
+    "native/installer/dev_host_migration.hpp": "a844a96e1ba4481780f61f101612e36981652f9d407b4f15aafb98f5a193390e",
+    "native/installer/dev_host_migration_history.hpp": "8d31f8ae3c9fc9e56467874a0f55efdd2ead838e8631861d4e0fc78a402c45c6",
+    "native/installer/dev_host_migration_inspection_command.hpp": "c0ebc76756fc912c1bd7c3a8e60a83fc7aa854ee37505317a9807bb1b8d98b2e",
+    "native/installer/dev_host_migration_recovery.hpp": "3338d56edd75f1bdc718dc5c1e694fcbbb492bd5447ee20da55c136c66f6662d",
+    "native/installer/dev_host_migration_rollback.hpp": "4acefd5f3843827405d54297f934767a4cc225892bd7a25dee51e9293380496a",
+    "native/installer/dev_host_migration_rollback_command.hpp": "4d67ec3cf88c93b48cd89788243d7ae142448c8dee6f4c1182b9e4b26aa70a5a",
+    "native/installer/dev_host_package_migration.hpp": "24131973f5630cb0ecc5fd31b5ee652c962a8951eb255b2dfcc773b19a2138f7",
+    "native/installer/dual_architecture_transaction.hpp": "9f6e6452a64b865cfe028c3333fec776efa00a2a5b451d9c78c38c7fc1825bd5",
+    "native/installer/durable_cli_session.hpp": "613e831fe50ae76065c763acaa7020a2a59c8f09f4b99b37bd70fa2c576c4887",
+    "native/installer/durable_compensation_marker.hpp": "2a001283a892748583816050934baf8f59f0855d270ec6fd47df07bb8e6dffff",
+    "native/installer/durable_deployment_recovery.hpp": "8018d51271c7cbe13dfc41b82227fb32a46af6a88dbe397290acc41bdacc9430",
+    "native/installer/durable_journal.hpp": "0492c03352125da3a28458084ec255251da0a07ea76e67a070e428823e19b8bd",
+    "native/installer/durable_transaction_observer.hpp": "e97c3bceae19a53bd4b17b4e2121bae74eb68d48b4ed30d8720ec3383776ac53",
+    "native/installer/durable_transaction_snapshot.hpp": "5ed0577cddac429743edba450f901bd83b1280e036d9215176b690021d3ce210",
+    "native/installer/file_deployment.hpp": "4112af14eb8073535e55b53075690f54383cc4247b4880e2d3fdb8643f87307b",
+    "native/installer/lifecycle_main.cpp": "037c3d125160395f040592ef3f20a2b5aff5e56a4984e47432760f8ebcdb2e40",
+    "native/installer/profile_display_backend.hpp": "8a6928ae378a8e4239b1b67a6441ce4ea87249f43f4d32ea5cf1f9cd2a2f2893",
+    "native/installer/profile_display_health.hpp": "bf871db08377b3303683a1f5040144ed48ff22d384d51148e7b66e8d24475ffa",
+    "native/installer/profile_display_mutation.hpp": "a0b6e065eb59cb10d1eee9e28e8695aa7741f965a21f6530505a271557fe09c6",
+    "native/installer/profile_display_payload.hpp": "4b94f698085e649aaa5b8fa12ebf3f12fd8fa2ca1b4498425a5df8816c647e59",
+    "native/installer/profile_display_plan.hpp": "111fcd41f49aae804163d9fb30e72e844d805af1f0d04f925e740cf87c3c97c5",
+    "native/installer/profile_display_registry.hpp": "0f6e7db2f74f797860f572a8767c12d07086ff43614d0b03ddd69560098311e4",
+    "native/installer/profile_display_repair.hpp": "dfc1d951341e9659cbc5d9842657c0da09d7975e780527bf8e99cc895c2ea6fb",
+    "native/installer/profile_display_snapshot.hpp": "1eadeb3150f1c15535800916a04712a6455b6d09a86a64e5bef8ed20174bced0",
+    "native/installer/tray_status.hpp": "507f6a9d0d542a5af79aa7883bd3dd2f1014c2f40f267e2ae2acd96b0b1840ed",
+    "native/installer/tsf_shared_store.hpp": "791cf99eda895fa3aa9fab0878536c4164f61b4710916fe6d08abf5cce439c41",
+    "native/installer/windows_backend.hpp": "70faa50d4bb155400c62ce5bb1501612f11c69faee28c8b7b10c8c66b1f6987b",
+    "native/installer/windows_profile_display_access.hpp": "9cd84ef9061cce32a7f67a85e2518d3419a1680b7a870914ace1bd6b9e586b81",
+    "native/installer/windows_profile_display_repair.hpp": "f158b0e37d025ec5405508be1018cd29fbe7178c53eac8faf8d42f26c997f763",
+    "native/keyboard_modes.hpp": "410b7e19e4037d34256e079badd46045e22f47309ddb6f55363854b036bee470",
+    "native/lookup.hpp": "881c0ea7855838632d9291f9756533af76ea1439380acbf410b028af4021e4a3",
+    "native/modes.hpp": "41c93c03dba13467dc4e176768da8838bd726d68f3f7b221a3f6bf37309802ba",
+    "native/observed_primary_homophones.hpp": "41fca6170b7e9477349dda7c604eeb40f824cd99ba746d5b83a2e6839081154c",
+    "native/observed_primary_homophones_data.hpp": "2b9cc88b1c19e408a3b5f4249e5b17c7afabac77c7367a097bfde6d88c5a35c9",
+    "native/package-install-windows.ps1": "16624a5fac92b837af94e8f1a1df12ae62d82c037d1035c62411a4f6f16c0711",
+    "native/package-windows.ps1": "827b46e738ef7f2ec8f93f0c2801bd77b9d9736bad1696ce40dcba383d8a7d13",
+    "native/package/Setup.cs": "42aef22918f4f2d65f01e4d3f5a22daca3cc775f3ff1affaa67f6ca12c968f8c",
+    "native/package/branding.rc": "36b43e9fc8c1a136fe511a9e8571e6a8426a21cae5bd88f58d8532ceaceebf42",
+    "native/package/display_name.rc": "a0d8c6451883ac417bca17427ad0581c5a1dc7526f58279fdcced071b64c2f41",
+    "native/phonetic_candidates.hpp": "96cf394eeeacafbb03e204cd1d64a1748b64d7a81ca5b824ed79252ecef57689",
+    "native/readings.hpp": "7a27531434e8ccce95fe0d2cad25284df085dfc7ec2b47eb262396be2fc6493b",
+    "native/recommended_codes.hpp": "78bc274ac3ee756ad9fd95e69ba14ae42d2dbf28f7dbb11eb67ee7eb0b1e9381",
+    "native/settings.hpp": "00cab97fa6f32ff9e1f6f5c9d9fce24799a90dd838f3df22c81662309409cd50",
+    "native/shift_toggle.hpp": "c83aa6389307910a817026d9f0e30e196a42fc0346b375f1f86de37e0ba309ce",
+    "native/tests/com_registration_tests.cpp": "cd7d36d1709cf1076eef5da745717c0987e58a611cf63195d9b6a873ff021c5d",
+    "native/tests/install-release-readback-tests.ps1": "de75f9b51e1fbca614647b98907e68ffbd7f3e7846d4a0a60ac65b5c8e37478f",
+    "native/tests/installer_command_line_tests.cpp": "e50975cbe311e93134e749ed8d7f3cd3df8103524afc2ae13b8c686a66f93e15",
+    "native/tests/installer_deployment_coordinator_tests.cpp": "0b4bad48bac7e899223f9b6deaa3ef30dea2ef4883ceaa55ae08fb938bce52e3",
+    "native/tests/installer_dev_host_migration_tests.cpp": "21dcb309587b22fc872ff7dd914b7f8b458add3abd836050d03af9494969ead3",
+    "native/tests/installer_dev_host_programfiles_migration_tests.cpp": "ca8b1330c13c39c02d19eecb53e090a132f464fce25aedecd515cee8e85bcb28",
+    "native/tests/installer_dual_architecture_tests.cpp": "2ceae4e487385419e68bdbb103cf6ba22664150c628e3113331aba799ca9ce92",
+    "native/tests/installer_durable_cli_tests.cpp": "d4f5d5016d72a199c6e3b6d26a1e1edabce7e3d372bd89aeca72fb8774124342",
+    "native/tests/installer_durable_singleton_recovery_tests.cpp": "9b017e5b5c91a7cd44fefbeb4cf851b8b15577d1e862054efec3174bbf2e66fe",
+    "native/tests/installer_durable_transaction_observer_tests.cpp": "2d07d015c7494c81d75cb17f928ebc0aa1f8e3c3a0dc953409af1c1850dfb648",
+    "native/tests/installer_durable_transaction_snapshot_tests.cpp": "56dfc9cc2aa62e167b56e63e1f4b77aed74794d791c249b55b87bfe5a11d7960",
+    "native/tests/installer_package_cli_tests.cpp": "5f18eaf5bf8270e4cac0b3ca6af34890c4d12e2bec4e95230788d4d1c7911358",
+    "native/tests/installer_status_report_tests.cpp": "841af12f19211a31f8d2c1cf2c03801e6337a07e5ce273f64d573cb7074dd5b6",
+    "native/tests/installer_windows_backend_tests.cpp": "423739cb8d2095db1b82f85281a0704e66040400aa11971ffc98ba8c5df27acb",
+    "native/tests/language_bar_mode_icon_tests.cpp": "1289518c8bfe9d5bc1dc85d482fbca5a6f101a92cb029f06c33e80153eab8bb5",
+    "native/tests/language_bar_tests.cpp": "9d9bcc394ff20a6099843e33798b5f5f1cfebfeb9442605bc7acb601cd8429c1",
+    "native/tests/modern_host_registration_oracle_tests.cpp": "630d99a035804cba1bd5a75554442c9d7df5c026e738104c942ffdfa696d69c5",
+    "native/tests/package-install-windows-tests.ps1": "0e025645c18efeaef5eec838857634a58aeabd38da4bbd3c94eb1c21f920c383",
+    "native/tests/tsf_conversion_tests.cpp": "56263d5e9fa447cbe08f55089e98d447266d8b2336f51f24cf00b9ac536cdf99",
+    "native/tests/tsf_language_bar_tests.cpp": "e828d796e7d4637e50a352073e06f07683b3fc6bf5d881ccbf34ac40623d8987",
+    "native/toolchain.py": "83ce78cfa8eaf3dbed31938981869c96081106045b4794633d79355426c5b79c",
+    "native/tools/lookup_main.cpp": "0a11582a63a6c03eb2f4b40eecc7150984c5fcc3f3002463474e25c8ee2e6f54",
+    "native/tools/lookup_window.hpp": "f3c3861d45f8ef85a5cd259cebfd76f43189a888a670c50c483469a1964df8e7",
+    "native/tools/register_main.cpp": "7932cd78322ac589518fee631fbe46f4fd999aa2f32d11c617cf8f4c09d52001",
+    "native/tools/root_chart.hpp": "2a93424bc0fe3a841eb31ab532055566b6b34de2fa0140a7d0f1bb9315b83994",
+    "native/tools/root_chart_eg_sound_glyph_render.hpp": "eb2beee34b3ab6a1bfca6cfcc85341ca9a8128be9d1a2a676790dfabe96552b8",
+    "native/tools/root_chart_eg_sound_glyphs.hpp": "ec41ac86748cb8a3f181a7203715768f44225a3929e37b470a26dee116f3a30e",
+    "native/tools/root_chart_f_meaning_glyph_render.hpp": "30307dcc14ff5c48910d0b5c6d98e487a8fc1bbcbba5df1f38430bab9589e621",
+    "native/tools/root_chart_f_meaning_glyphs.hpp": "7759d2f29b245c543ff1e08c5430fc1ff396466b9bde37317820b00facaec07f",
+    "native/tools/root_chart_f_sound_glyph_render.hpp": "2ac1ba38494ceffd0653c3fd1ec9f4ebb53fe43400ccfe266200bf91d5cd768f",
+    "native/tools/root_chart_f_sound_glyphs.hpp": "8ffc03cc7e6db27d229733bfa4891367e2906c2e7f9beb6f46404afe2f6a95ad",
+    "native/tools/root_chart_k_meaning_glyph_render.hpp": "ef6ec5589771bc18a41e4537ab118a1cdcfe2a3e19426322bf140d7d0a7f705b",
+    "native/tools/root_chart_k_meaning_glyphs.hpp": "6c0393a07748bbad7fe99bbe6120de5442051708c75f3b875ad5ff0711b9e688",
+    "native/tools/root_chart_q7_glyph.hpp": "ec8ddbc3354efa97f5b37823cb601d3c5330500dfcff9171bdc836d39aba37d0",
+    "native/tools/root_chart_q7_render.hpp": "87f376fe38bb9c9a21938e415e793136efc8183c2bef4191ad146257cc49aa08",
+    "native/tools/root_chart_qglyph_render.hpp": "f9ed3eeafa3e4e6c9f50cf5e459c1e48c50860d285b5a55a0424a7c83e6a0280",
+    "native/tools/root_chart_qglyphs.hpp": "e285a4d7dc2007178c8951b7caa2f0c147d87ddd4b2eb2a110773ca323efc71f",
+    "native/tools/root_chart_rs_glyph_render.hpp": "e2310866d04a7a561ed167d15632e51e543a021766b58e0e170b43391c391c71",
+    "native/tools/root_chart_rs_glyphs.hpp": "c6dcc1b169f7e9ca3b698cabfcdb06be968e6b6b29e81c4df8a7db552196f346",
+    "native/tools/root_chart_shape_glyph_render.hpp": "baad80444dca306dcb095c6351e4a6bd2ba33b781d0f5604967ad79b2e51f0ac",
+    "native/tools/root_chart_shape_glyphs.hpp": "57035dbbc08ed642c164119a72c361b67e0d8d84de2d343fc1f8e74981024d16",
+    "native/tools/root_chart_t_meaning_glyph_render.hpp": "b8220d5815abb2c1d95868eb320312fad91bf8015366ddeeb4801588a827cd38",
+    "native/tools/root_chart_t_meaning_glyphs.hpp": "058c195d9112f4b206c4430f3626c4a5a0cf94172c1b17069617823e9e922d9b",
+    "native/tools/root_chart_window.hpp": "dd8811da0129686436ed326689569531c1911e9dc774ef19a2d7d93f04a90866",
+    "native/tools/settings_main.cpp": "a9247db5018a0073c03c1fce571cf7c0ef60e0e6db5e22e45ee37451b3d67290",
+    "native/tools/settings_window.hpp": "4dc339cf2a3940c6d5c55857fa517023de3954b51ce8634569234090f2337e10",
+    "native/tsf/activation_diagnostics.hpp": "c47d0bc3fc25741c0067d827f51096123d8bab8ce287d781961f03d732c27851",
+    "native/tsf/candidate_ui_element.hpp": "64a5a6e2ee2c9cce2ed14e12980d2e74b4a3b5782a5d006c30045d3190639255",
+    "native/tsf/candidate_window.hpp": "99fa6aa5c5e05a5d6ce90cf69dec00281087549ae6f982471342b7b0283e6501",
+    "native/tsf/com_registration.hpp": "0a80a9d4ae7991c35e763b79e93d608dc3eddc2fd68ba5e166b31bee3796da83",
+    "native/tsf/compartment_ids.hpp": "7bc22321d96412232f7da01b2aabac343b21ec4d41cb6efffa1904725041022f",
+    "native/tsf/language_bar.hpp": "b3a2423548211a2f2480842cfd784273463f8e9d5b94863d12c54afd71403b05",
+    "native/tsf/mode_icon.hpp": "116845916ee3ad80ab1a2c2c3ed9b9f27958167c62f411c5cf315e534d87311f",
+    "native/tsf/open_close_binding.hpp": "7ccb2d223d7a131f8960256951bd86a70038909a3818c4da3c3971113c61e3b6",
+    "native/tsf/preserved_keys.hpp": "b3dcff4079b9f555f0447877ad0ac3526144d6d1aba73d44b2ab450e498fd373",
+    "native/tsf/profile_display_name_resource.hpp": "d4a4e835b276e36d7ae75310b46fd2938846e033224edf1a3cf82f132c555e5d",
+    "native/tsf/profile_display_update.hpp": "1c8d39293b43871dfb0f99642aa874bc5a9fc3c81811433b0e318793e1e3eb1a",
+    "native/tsf/profile_icon_relocation.hpp": "113651531961546f43b3c773e3a2d29c80928f6d6b944659bfea16a8d9ea2c6d",
+    "native/tsf/registration_diagnostics.hpp": "f7134c3b4cb84c0018e2cb51920e6279da8481057f838def49f4b14407299e77",
+    "native/tsf/registration_plan.hpp": "3f7c8a7badb22b6eb3210da1249e716f7fe488d9e4875075f1e70d7c2683d149",
+    "native/tsf/resources.rc": "8de287373a785547b8a4a93993119b2ee32f2264e19f6c68dac05495fc582563",
+    "native/tsf/runtime_diagnostics.hpp": "4d56e1ff40ccd62f81c539e4d894335b03caf21c67e5b8a9e85a04164f33d078",
+    "native/tsf/service.cpp": "e9a6c1a16f8fe3bfed60d64218cbc86010aa83fba61b31e363e5c5570f527106",
+    "native/tsf/service.def": "b09c33bec2d5197fff19567f58cf542243914aa34716918a6d97d55b7288877f",
+    "native/tsf/text_layout.hpp": "3f55d255bd8febedfbb821e7d0acc99550235c78793bd8bf0dd404d54be38ba9",
+    "native/tsf/windows_profile_display_update.hpp": "afa4f0a5af0be3bd69e929870620d3404f30be9df7fd6ba7cd84a97a0a873dd3",
+    "native/tsf/windows_registration.hpp": "5a1e4ceb5adf54819311aaf10dada90c034947eb85b4f619f51379b4c45ad786",
+    "native/user_profile_enable.hpp": "b6f1bce9e283e9fcb9884c39a08f0703027f5964883e0017d6b490caa91125dc",
+    "native/zhuyin_keyboard.hpp": "8b3ee2ebd8ab7f541afd731e09cfbc1a37f15bff213ead736f205d2189d144c4",
+    ".gitattributes": "705fd4d6451a31d36b3df7de96f83f30ac976c9b4a6d1e51671d8e2f33e2d0da",
+    "VALIDATION.md": "9fde327ab877841b9fe6c9744cb0582a188fea2a6b5a23c3e50dc5e82f36e4b9"
+  },
+  "validation": {
+    "source_closures_complete": true,
+    "private_path_scan_passed": true,
+    "product_cpp_matches_source": true,
+    "retained_runtime_data_verified": true,
+    "build_or_tests_rerun": false,
+    "installation_independent_readback_passed": true,
+    "git_preserves_file_bytes": true,
+    "user_confirmed_r60_checks": [
+      "Windows Search a/Space and oek/Space",
+      "Microsoft Store a/Space and oek/Space",
+      "Separate 中/英 and static colorful brand"
+    ],
+    "historical_terminal_result_retained": true,
+    "fresh_r60_terminal_test": false,
+    "full_historical_backlog_claimed": false
+  },
+  "updated_utc": "2026-10-26T10:12:22.786428+00:00",
+  "publication_target": {
+    "repository": "hamanpaul/wugai-windows",
+    "tag": "r60",
+    "architecture": "x64",
+    "prerelease": true
+  }
+}
