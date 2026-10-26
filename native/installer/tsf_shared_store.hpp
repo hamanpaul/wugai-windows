@@ -114,12 +114,8 @@ public:
         if (!path) return E_POINTER;
         path->clear();
         if (profile_relocation_uncertain_) return HRESULT_FROM_WIN32(ERROR_REVISION_MISMATCH);
-        profile_display::WindowsProfileDisplayBackend profiles;
-        if (profiles.ready() != S_OK) return profiles.ready();
-        profile_display::ProfileSnapshot observed;
-        const HRESULT hr = profiles.read(&observed);
-        if (hr == S_OK) *path = observed.registry.icon_file;
-        return hr;
+        return profile_display::windows_detail::read_profile_icon_path(
+            HKEY_LOCAL_MACHINE, profile_display::windows_detail::profile_key_path(), path);
     }
     HRESULT relocate_profile_icon(const std::wstring& expected, const std::wstring& target) override {
         if (profile_relocation_uncertain_) return HRESULT_FROM_WIN32(ERROR_REVISION_MISMATCH);
