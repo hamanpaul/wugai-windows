@@ -15,6 +15,8 @@
 #include "windows_backend.hpp"
 #include "../tsf/windows_profile_display_update.hpp"
 #include "../tsf/profile_icon_relocation.hpp"
+#include "profile_uninstall_cleanup.hpp"
+#include "independent_categories.hpp"
 
 namespace boshiamy::installer {
 
@@ -32,10 +34,14 @@ class TsfSharedApi {
 public:
     virtual ~TsfSharedApi() = default;
     virtual HRESULT profile_present(bool* present) = 0;
+    virtual HRESULT profile_presence_after_write(bool, bool* present) { return profile_present(present); }
     virtual HRESULT profile_capabilities(DWORD* capabilities) {
         if (!capabilities) return E_POINTER;
         *capabilities = 0;
         return E_NOTIMPL;
+    }
+    virtual HRESULT profile_capabilities_with_required(DWORD, DWORD* capabilities) {
+        return profile_capabilities(capabilities);
     }
     // Optional metadata support. Legacy fake/host APIs retain their old path
     // policy when no independently read icon metadata is available.
@@ -49,6 +55,9 @@ public:
     virtual HRESULT profile_user_state(bool* enabled, bool* is_default) = 0;
     virtual HRESULT restore_profile_user_state(bool enabled, bool is_default) = 0;
     virtual HRESULT category_present(Resource resource, bool* present) = 0;
+    virtual HRESULT category_presence_after_write(Resource resource, bool, bool* present) {
+        return category_present(resource, present);
+    }
     virtual HRESULT register_category(Resource resource) = 0;
     virtual HRESULT unregister_category(Resource resource) = 0;
 };
@@ -69,6 +78,7 @@ class WindowsTsfSharedApi final : public TsfSharedApi {
     ComPtr<ITfCategoryMgr> categories_;
     HRESULT ready_ = E_UNEXPECTED;
     bool profile_relocation_uncertain_ = false;
+    bool profile_was_unregistered_ = false;
 
     HRESULT profile_manager_status(bool* present) {
         if (!present) return E_POINTER;
@@ -108,7 +118,14 @@ public:
     HRESULT ready() const { return ready_; }
     HRESULT profile_present(bool* present) override {
         if (profile_relocation_uncertain_) return HRESULT_FROM_WIN32(ERROR_REVISION_MISMATCH);
+        if (FAILED(ready_)) return ready_;
+        if (profile_was_unregistered_) return independent_categories::read_profile_present_fresh(present);
         return profile_manager_status(present);
+    }
+    HRESULT profile_presence_after_write(bool expected, bool* present) override {
+        return independent_categories::retry_presence(
+            [this](bool* value) { return profile_present(value); }, [] { Sleep(250); },
+            expected, 40, present);
     }
     HRESULT profile_icon_path(std::wstring* path) override {
         if (!path) return E_POINTER;
@@ -134,30 +151,36 @@ public:
         return result.operation;
     }
     HRESULT profile_capabilities(DWORD* capabilities) override {
+        return profile_capabilities_with_required(0,capabilities);
+    }
+    HRESULT profile_capabilities_with_required(DWORD required, DWORD* capabilities) override {
         if (!capabilities) return E_POINTER;
         *capabilities = 0;
         if (FAILED(ready_)) return ready_;
-        TF_INPUTPROCESSORPROFILE profile{};
-        const HRESULT hr = profiles_.get()->GetProfile(TF_PROFILETYPE_INPUTPROCESSOR,
-            kInstallerProfileLanguage, kInstallerTsfClsid, kInstallerProfileGuid, nullptr, &profile);
-        if (hr != S_OK) return hr;
-        if (profile.dwProfileType != TF_PROFILETYPE_INPUTPROCESSOR ||
-            profile.langid != kInstallerProfileLanguage ||
-            !IsEqualCLSID(profile.clsid, kInstallerTsfClsid) ||
-            !IsEqualGUID(profile.guidProfile, kInstallerProfileGuid)) return E_UNEXPECTED;
-        *capabilities = profile.dwCaps;
-        return S_OK;
+        bool present=false;
+        const HRESULT observed=profile_manager_status(&present);
+        if(observed!=S_OK)return observed;
+        return independent_categories::read_profile_caps_fresh(capabilities,present,required);
     }
     HRESULT register_profile(const std::wstring& icon_path, bool enabled_by_default) override {
         if (FAILED(ready_)) return ready_;
         const std::wstring description = L"嘸．改";
-        return profiles_.get()->RegisterProfile(kInstallerTsfClsid, kInstallerProfileLanguage, kInstallerProfileGuid,
+        HRESULT status = profiles_.get()->RegisterProfile(kInstallerTsfClsid, kInstallerProfileLanguage, kInstallerProfileGuid,
             description.c_str(), static_cast<ULONG>(description.size()), icon_path.c_str(), static_cast<ULONG>(icon_path.size()),
             0, nullptr, 0, enabled_by_default ? TRUE : FALSE, 0);
+        if (status == S_OK) profile_was_unregistered_ = false;
+        return status;
     }
     HRESULT unregister_profile() override {
         if (FAILED(ready_)) return ready_;
-        return profiles_.get()->UnregisterProfile(kInstallerTsfClsid, kInstallerProfileLanguage, kInstallerProfileGuid, 0);
+        profile_uninstall::WindowsStore residue(profile_display::windows_detail::profile_key_path());
+        profile_uninstall::UserState before;
+        HRESULT status = residue.read_user(&before);
+        if (status != S_OK) return status;
+        status = profiles_.get()->UnregisterProfile(kInstallerTsfClsid, kInstallerProfileLanguage, kInstallerProfileGuid, 0);
+        if (status != S_OK) return status;
+        profile_was_unregistered_ = true;
+        return profile_uninstall::finish(residue, before);
     }
     HRESULT profile_user_state(bool* enabled, bool* is_default) override {
         if (!enabled || !is_default) return E_POINTER;
@@ -191,18 +214,16 @@ public:
         if (FAILED(ready_)) return ready_;
         const GUID* category = category_id(resource);
         if (!category) return E_INVALIDARG;
-        ComPtr<IEnumGUID> enumeration;
-        HRESULT hr = categories_.get()->EnumCategoriesInItem(kInstallerTsfClsid, enumeration.put());
+        std::vector<GUID> categories;
+        const HRESULT hr = independent_categories::read_fresh(&categories);
         if (hr != S_OK) return hr;
-        if (!enumeration.get()) return E_UNEXPECTED;
-        for (;;) {
-            GUID found{}; ULONG count = 0;
-            hr = enumeration.get()->Next(1, &found, &count);
-            if (hr == S_FALSE && !count) return S_OK;
-            if (hr != S_OK) return hr;
-            if (count != 1) return E_UNEXPECTED;
-            if (IsEqualGUID(found, *category)) { *present = true; return S_OK; }
-        }
+        *present = std::any_of(categories.begin(),categories.end(),[&](const GUID& item){return IsEqualGUID(item,*category);});
+        return S_OK;
+    }
+    HRESULT category_presence_after_write(Resource resource, bool expected, bool* present) override {
+        return independent_categories::retry_presence(
+            [this,resource](bool* value) { return category_present(resource, value); }, [] { Sleep(250); },
+            expected, 40, present);
     }
     HRESULT register_category(Resource resource) override {
         if (FAILED(ready_)) return ready_;
@@ -244,7 +265,10 @@ enum class SharedStoreTracePhase : uint8_t { Read, Apply, ApplyCompensation, Res
 enum class SharedStoreTraceStage : uint8_t {
     StateRevalidation, CategoryReadback, MarkerRead, RegisterCategory, CategoryReadbackAfterRegister,
     ProfileCapabilities, UnregisterCategory, UnregisterCategoryCompensation, CategoryReadbackAfterCompensation,
-    MarkerWrite, MarkerRemove, FinalReadback, FinalVerification
+    MarkerWrite, MarkerRemove, FinalReadback, FinalVerification,
+    ProfileReadback, RegisterProfile, UnregisterProfile, ProfileIconReadback,
+    ProfileUserStateRestore, ProfileUserStateReadback, ProfileUserStateVerification,
+    FinalUserStateVerification, FinalMarkerVerification, PostApplyVerification
 };
 struct SharedStoreTraceEvent {
     SharedStoreTracePhase phase = SharedStoreTracePhase::Read;
@@ -256,9 +280,12 @@ struct SharedStoreTraceEvent {
     bool capabilities_known = false;
     DWORD capabilities = 0;
     DWORD required_capability = 0;
+    bool user_state_known = false;
+    bool enabled = false;
+    bool is_default = false;
 };
 class SharedStoreTrace {
-    static constexpr size_t kCapacity = 32;
+    static constexpr size_t kCapacity = 128;
     std::array<SharedStoreTraceEvent, kCapacity> events_{};
     size_t count_ = 0;
     size_t dropped_ = 0;
@@ -388,6 +415,7 @@ class WindowsTsfSharedStore final : public SharedResourceStore {
     std::array<ResourceState, 4> last_{};
     std::array<bool, 4> valid_{};
     std::array<bool, 4> pending_created_{};
+    std::array<bool, 4> uncertain_creation_{};
     std::array<std::wstring, 4> pending_path_{};
     static size_t slot(Resource resource) {
         return resource == Resource::profile ? 0 : resource == Resource::keyboard_category ? 1 :
@@ -400,17 +428,38 @@ class WindowsTsfSharedStore final : public SharedResourceStore {
     void trace(SharedStoreTracePhase phase, SharedStoreTraceStage stage, Resource resource,
                HRESULT status, bool present_known = false, bool present = false,
                bool capabilities_known = false, DWORD capabilities = 0, DWORD required = 0) const noexcept {
-        if (!trace_ || resource != Resource::ui_element_category) return;
+        if (!trace_ || !is_shared(resource)) return;
         trace_->record({phase, stage, resource, status, present_known, present,
                         capabilities_known, capabilities, required});
+    }
+    void trace_user(SharedStoreTracePhase phase, SharedStoreTraceStage stage,
+                    HRESULT status, bool known, bool enabled, bool is_default) const noexcept {
+        if (!trace_) return;
+        SharedStoreTraceEvent event{phase, stage, Resource::profile, status};
+        event.user_state_known = known;
+        event.enabled = enabled;
+        event.is_default = is_default;
+        trace_->record(event);
     }
     HRESULT read_uncached(Resource resource, ResourceState* state) {
         if (!state) return E_POINTER;
         if (!is_shared(resource)) return E_INVALIDARG;
         *state = ResourceState{};
         bool present = false; HRESULT hr = resource == Resource::profile ? api_.profile_present(&present) : api_.category_present(resource, &present);
-        trace(SharedStoreTracePhase::Read, SharedStoreTraceStage::CategoryReadback, resource, hr, hr == S_OK, present);
+        trace(SharedStoreTracePhase::Read, resource == Resource::profile ? SharedStoreTraceStage::ProfileReadback :
+              SharedStoreTraceStage::CategoryReadback, resource, hr, hr == S_OK, present);
         if (hr != S_OK) return hr;
+        // A failed registration API is allowed to have side effects. Without
+        // durable ownership proof, neither presence nor absence can be adopted
+        // as a completed mutation or used to remove another actor's relation.
+        if (uncertain_creation_[slot(resource)])
+            return HRESULT_FROM_WIN32(ERROR_RETRY);
+        // After a successful create, an absent TSF read may be a delayed
+        // observation. It is not evidence that compensation has completed.
+        // Keep the operation pending and fail closed until it can be observed
+        // or an explicit removal has independently established absence.
+        if (!present && pending_created_[slot(resource)])
+            return HRESULT_FROM_WIN32(ERROR_RETRY);
         OwnerMarker marker; hr = markers_.read(resource, &marker);
         trace(SharedStoreTracePhase::Read, SharedStoreTraceStage::MarkerRead, resource, hr);
         if (hr != S_OK) return hr;
@@ -423,15 +472,25 @@ class WindowsTsfSharedStore final : public SharedResourceStore {
         if (resource == Resource::profile && present) {
             std::wstring actual_icon;
             const HRESULT icon_status = api_.profile_icon_path(&actual_icon);
+            trace(SharedStoreTracePhase::Read, SharedStoreTraceStage::ProfileIconReadback, resource, icon_status);
             if (icon_status == S_OK) {
-                if (actual_icon.empty()) return HRESULT_FROM_WIN32(ERROR_INVALID_DATA);
+                if (actual_icon.empty()) {
+                    trace(SharedStoreTracePhase::Read, SharedStoreTraceStage::ProfileIconReadback,
+                          resource, HRESULT_FROM_WIN32(ERROR_INVALID_DATA));
+                    return HRESULT_FROM_WIN32(ERROR_INVALID_DATA);
+                }
+                if (pending_created_[index] && !marker.present && actual_icon != pending_path_[index])
+                    return HRESULT_FROM_WIN32(ERROR_REVISION_MISMATCH);
                 if (marker.present && marker.owner == owner_ && actual_icon != marker.path &&
                     !(pending_created_[index] && actual_icon == pending_path_[index]))
                     return HRESULT_FROM_WIN32(ERROR_REVISION_MISMATCH);
                 state->path = actual_icon;
             } else if (icon_status != E_NOTIMPL) return icon_status;
             bool enabled = false, is_default = false;
-            hr = api_.profile_user_state(&enabled, &is_default); if (hr != S_OK) return hr;
+            hr = api_.profile_user_state(&enabled, &is_default);
+            trace_user(SharedStoreTracePhase::Read, SharedStoreTraceStage::ProfileUserStateReadback,
+                       hr, hr == S_OK, enabled, is_default);
+            if (hr != S_OK) return hr;
             const uint32_t magic = kProfileUserStateMagic;
             const auto* tag = reinterpret_cast<const unsigned char*>(&magic);
             state->private_data.insert(state->private_data.end(), tag, tag + sizeof(magic));
@@ -510,11 +569,9 @@ class WindowsTsfSharedStore final : public SharedResourceStore {
             if (present) {
                 OwnerMarker marker; HRESULT hr = make_marker(resource, target, &marker); if (FAILED(hr)) return hr;
                 hr = api_.register_profile(target.path, false);
+                trace(phase, SharedStoreTraceStage::RegisterProfile, resource, hr);
                 if (FAILED(hr)) {
-                    bool appeared = false;
-                    if (api_.profile_present(&appeared) == S_OK && appeared) {
-                        pending_created_[slot(resource)] = true; pending_path_[slot(resource)] = target.path;
-                    }
+                    uncertain_creation_[slot(resource)] = true;
                     return hr;
                 }
                 pending_created_[slot(resource)] = true; pending_path_[slot(resource)] = target.path;
@@ -523,47 +580,35 @@ class WindowsTsfSharedStore final : public SharedResourceStore {
                 // Empty, new, and orphan-marker states are fresh installs.
                 decode_profile_user_state(target.private_data, &enabled, &is_default);
                 hr = api_.restore_profile_user_state(enabled, is_default);
+                // This stage records the requested state. The next stage records
+                // the independently observed state, without additional API calls.
+                trace_user(phase, SharedStoreTraceStage::ProfileUserStateRestore, hr, true, enabled, is_default);
                 if (FAILED(hr)) return hr;
                 bool observed_enabled = false, observed_default = false;
                 hr = api_.profile_user_state(&observed_enabled, &observed_default);
+                trace_user(phase, SharedStoreTraceStage::ProfileUserStateReadback,
+                           hr, hr == S_OK, observed_enabled, observed_default);
                 if (hr != S_OK) return hr;
-                if (observed_enabled != enabled || (is_default && !observed_default))
+                if (observed_enabled != enabled || (is_default && !observed_default)) {
+                    trace_user(phase, SharedStoreTraceStage::ProfileUserStateVerification,
+                               HRESULT_FROM_WIN32(ERROR_INVALID_DATA), true, observed_enabled, observed_default);
                     return HRESULT_FROM_WIN32(ERROR_INVALID_DATA);
+                }
                 // A false default request does not clear an existing default.
                 // Preserve the actual verified value for the later readback.
                 if (registered_user) *registered_user = {observed_enabled, observed_default};
                 return S_OK;
             }
-            return api_.unregister_profile();
+            const HRESULT status = api_.unregister_profile();
+            trace(phase, SharedStoreTraceStage::UnregisterProfile, resource, status);
+            return status;
         }
         if (present) {
             HRESULT hr = api_.register_category(resource);
             trace(phase, SharedStoreTraceStage::RegisterCategory, resource, hr);
-            if (resource != Resource::system_tray_category && resource != Resource::ui_element_category) {
-                if (SUCCEEDED(hr)) pending_created_[slot(resource)] = true;
-                else {
-                    bool appeared = false;
-                    if (api_.category_present(resource, &appeared) == S_OK && appeared)
-                        pending_created_[slot(resource)] = true;
-                }
-                return hr;
-            }
             if (hr == S_OK) pending_created_[slot(resource)] = true;
-            else {
-                bool appeared = false;
-                const HRESULT observed = api_.category_present(resource, &appeared);
-                trace(phase, SharedStoreTraceStage::CategoryReadbackAfterRegister, resource, observed,
-                      observed == S_OK, appeared);
-                // Preserve failed-after-effect recovery: if a failed API call
-                // nevertheless created the relation, retain pending ownership
-                // so the transaction can compensate it. S_FALSE is different:
-                // it reports no mutation, so an appearing relation is a race
-                // and must not be claimed or removed.
-                if (FAILED(hr) && observed == S_OK && appeared)
-                    pending_created_[slot(resource)] = true;
-                if ((resource == Resource::system_tray_category || resource == Resource::ui_element_category) && hr == S_FALSE)
-                    return HRESULT_FROM_WIN32(ERROR_REVISION_MISMATCH);
-            }
+            else if (FAILED(hr)) uncertain_creation_[slot(resource)] = true;
+            else return HRESULT_FROM_WIN32(ERROR_REVISION_MISMATCH);
             return hr == S_OK ? S_OK : FAILED(hr) ? hr : E_FAIL;
         }
         const HRESULT status = api_.unregister_category(resource);
@@ -617,6 +662,7 @@ class WindowsTsfSharedStore final : public SharedResourceStore {
             (current.created_by_lifecycle || borrowed_icon_only) && current.path != target.path) {
             std::wstring actual_icon;
             hr = api_.profile_icon_path(&actual_icon);
+            trace(phase, SharedStoreTraceStage::ProfileIconReadback, resource, hr);
             if (hr == E_NOTIMPL) return HRESULT_FROM_WIN32(ERROR_NOT_SUPPORTED);
             if (hr != S_OK) return hr;
             if (actual_icon != current.path) return HRESULT_FROM_WIN32(ERROR_REVISION_MISMATCH);
@@ -632,10 +678,15 @@ class WindowsTsfSharedStore final : public SharedResourceStore {
         if (current.present != target_present) {
             hr = set_api_presence(resource, target_present, target, phase, &expected_user); if (hr != S_OK) return hr;
             bool observed = false;
-            hr = resource == Resource::profile ? api_.profile_present(&observed) : api_.category_present(resource, &observed);
+            hr = resource == Resource::profile ? api_.profile_presence_after_write(target_present, &observed) :
+                api_.category_presence_after_write(resource, target_present, &observed);
             trace(phase, SharedStoreTraceStage::FinalReadback, resource, hr, hr == S_OK, observed);
             if (hr != S_OK) return hr;
-            if (observed != target_present) return HRESULT_FROM_WIN32(ERROR_INVALID_DATA);
+            if (observed != target_present) {
+                trace(phase, SharedStoreTraceStage::FinalVerification, resource,
+                      HRESULT_FROM_WIN32(ERROR_INVALID_DATA), true, observed);
+                return HRESULT_FROM_WIN32(ERROR_INVALID_DATA);
+            }
             if (!observed) { pending_created_[slot(resource)] = false; pending_path_[slot(resource)].clear(); }
         }
         if ((resource == Resource::system_tray_category || resource == Resource::ui_element_category) && target_present) {
@@ -650,12 +701,12 @@ class WindowsTsfSharedStore final : public SharedResourceStore {
                 return HRESULT_FROM_WIN32(ERROR_INVALID_DATA);
             }
 
-            DWORD capabilities = 0;
-            HRESULT capability_status = api_.profile_capabilities(&capabilities);
-            const HRESULT api_capability_status = capability_status;
-            if (capability_status == S_FALSE) capability_status = E_FAIL;
             const DWORD required_capability = resource == Resource::system_tray_category ?
                 kInstallerProfileCapsSysTraySupport : kInstallerProfileCapsUiElementEnabled;
+            DWORD capabilities = 0;
+            HRESULT capability_status = api_.profile_capabilities_with_required(required_capability,&capabilities);
+            const HRESULT api_capability_status = capability_status;
+            if (capability_status == S_FALSE) capability_status = E_FAIL;
             const bool caps_known = capability_status == S_OK;
             trace(phase, SharedStoreTraceStage::ProfileCapabilities, resource, api_capability_status,
                   false, false, caps_known, capabilities, required_capability);
@@ -725,15 +776,20 @@ class WindowsTsfSharedStore final : public SharedResourceStore {
             { trace(phase, SharedStoreTraceStage::FinalVerification, resource, HRESULT_FROM_WIN32(ERROR_INVALID_DATA), true, verified.present); return HRESULT_FROM_WIN32(ERROR_INVALID_DATA); }
         if (resource == Resource::profile && target_present) {
             ProfileUserState verified_user;
-            if (!observed_profile_user_state(verified, &verified_user) ||
+            const bool user_known = observed_profile_user_state(verified, &verified_user);
+            if (!user_known ||
                 verified_user.enabled != expected_user.enabled ||
                 verified_user.is_default != expected_user.is_default)
-                { trace(phase, SharedStoreTraceStage::FinalVerification, resource, HRESULT_FROM_WIN32(ERROR_INVALID_DATA)); return HRESULT_FROM_WIN32(ERROR_INVALID_DATA); }
+                { trace_user(phase, SharedStoreTraceStage::FinalUserStateVerification,
+                             HRESULT_FROM_WIN32(ERROR_INVALID_DATA), user_known, verified_user.enabled, verified_user.is_default);
+                  return HRESULT_FROM_WIN32(ERROR_INVALID_DATA); }
         }
         const size_t user_bytes = resource == Resource::profile && target_present ? sizeof(uint32_t) + 2 : 0;
         if (verified.private_data.size() != expected_marker.size() + user_bytes ||
             !std::equal(expected_marker.begin(), expected_marker.end(), verified.private_data.begin()))
-            { trace(phase, SharedStoreTraceStage::FinalVerification, resource, HRESULT_FROM_WIN32(ERROR_INVALID_DATA)); return HRESULT_FROM_WIN32(ERROR_INVALID_DATA); }
+            { trace(phase, resource == Resource::profile ? SharedStoreTraceStage::FinalMarkerVerification :
+                    SharedStoreTraceStage::FinalVerification, resource, HRESULT_FROM_WIN32(ERROR_INVALID_DATA));
+              return HRESULT_FROM_WIN32(ERROR_INVALID_DATA); }
         trace(phase, SharedStoreTraceStage::FinalVerification, resource, S_OK, true, verified.present);
         if (verified_write) *verified_write = std::move(verified);
         return S_OK;
@@ -793,7 +849,11 @@ public:
         if (hr == S_OK && observed == S_OK) {
             // A later read must match the already validated write. Never
             // adopt a foreign marker or changed user state as a new baseline.
-            if (after != verified_write) return HRESULT_FROM_WIN32(ERROR_INVALID_DATA);
+            if (after != verified_write) {
+                trace(SharedStoreTracePhase::Apply, SharedStoreTraceStage::PostApplyVerification,
+                      resource, HRESULT_FROM_WIN32(ERROR_INVALID_DATA));
+                return HRESULT_FROM_WIN32(ERROR_INVALID_DATA);
+            }
             applied_target_[index] = desired;
             applied_state_[index] = std::move(verified_write);
             applied_valid_[index] = true;
@@ -867,7 +927,7 @@ public:
         HRESULT hr = api_.category_present(resource, &relation_present);
         if (hr != S_OK) return FAILED(hr) ? hr : E_FAIL;
         DWORD capabilities = 0;
-        hr = api_.profile_capabilities(&capabilities);
+        hr = api_.profile_capabilities_with_required(capability,&capabilities);
         if (hr != S_OK) return FAILED(hr) ? hr : E_FAIL;
         *supported = relation_present &&
             (capabilities & capability) != 0;

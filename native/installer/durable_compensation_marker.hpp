@@ -69,7 +69,7 @@ inline bool resource_compensation_valid(const journal::Identity& identity,
         const journal::Document& document, const ResourceStates& prestate,
         size_t begin, size_t end, const ApplyProjection& projection) {
     if (begin > end || (end-begin)%2) return false;
-    std::array<bool,static_cast<size_t>(Resource::count)> applied{}, restored{}, changed{};
+    std::array<bool,static_cast<size_t>(Resource::count)> applied{}, restored{}, changed{}, projected_shared{};
     std::array<std::string,static_cast<size_t>(Resource::count)> readback{};
     bool restoring=false,failed=false;
     for (size_t at=begin; at<end; at+=2) {
@@ -89,13 +89,21 @@ inline bool resource_compensation_valid(const journal::Identity& identity,
         const bool apply=intent_event.intent.action=="apply",restore=intent_event.intent.action=="restore";
         if ((!apply&&!restore) || (apply&&(restoring||failed||applied[index])) ||
             (restore&&(!applied[index]||restored[index]))) return false;
-        ResourceState original=prestate[index];
-        if (apply && resource==Resource::machine_com_x64) {
+        ResourceState original=prestate[index], projected_original=original;
+        std::string original_observation_fingerprint;
+        if (apply) {
             if (projection) {
-                ResourceState projected;
-                if (projection(resource,original,&projected)!=S_OK) return false;
-                original=std::move(projected);
-            } else if (original.present) return false;
+                if (projection(resource,original,&projected_original)!=S_OK) return false;
+            } else if (resource==Resource::machine_com_x64 && original.present) return false;
+            if (!durable_observer::detail::fingerprint_state(identity,resource,projected_original,
+                    &original_observation_fingerprint,false)) return false;
+            const bool shared=resource==Resource::profile || resource==Resource::keyboard_category ||
+                resource==Resource::system_tray_category || resource==Resource::ui_element_category;
+            projected_shared[index]=shared && projected_original!=original;
+            // Only machine COM projects its apply expected-before fingerprint.
+            // All apply observations use the projection, including absent TSF
+            // resources whose projection carries a version tag.
+            if (resource==Resource::machine_com_x64) original=std::move(projected_original);
         }
         std::string original_fingerprint;
         if (!durable_observer::detail::fingerprint_state(identity,resource,original,&original_fingerprint,restore)) return false;
@@ -105,17 +113,20 @@ inline bool resource_compensation_valid(const journal::Identity& identity,
             applied[index]=true;
             const auto& observation=observed_event.observation;
             if ((observation.operation_status==S_OK && observation.observed_fingerprint!=intent_event.intent.desired_fingerprint) ||
-                (observation.operation_status!=S_OK && observation.observed_fingerprint!=original_fingerprint &&
+                (observation.operation_status!=S_OK && observation.observed_fingerprint!=original_observation_fingerprint &&
                  !observation.mutation_may_have_occurred)) return false;
             readback[index]=observation.observed_fingerprint;
-            changed[index]=readback[index]!=original_fingerprint;
+            changed[index]=readback[index]!=original_observation_fingerprint;
             failed=observation.operation_status!=S_OK;
         } else {
             restoring=true;
-            // Every COM apply uses an owned semantic projection, while restore
-            // fingerprints include the raw tree. Their domains differ.
+            // COM and projected shared-resource apply observations describe
+            // owned semantics. Restore fingerprints retain the complete raw
+            // tree/marker/user state, so these domains cannot be compared.
+            // Runtime rollback still CAS-checks that exact pre-restore state;
+            // the terminal proof requires exact original target and readback.
             const bool com=resource==Resource::com_x64 || resource==Resource::com_x86 || resource==Resource::machine_com_x64;
-            if ((com ? !journal::detail::valid_hash(intent_event.intent.expected_before_fingerprint) :
+            if ((com || projected_shared[index] ? !journal::detail::valid_hash(intent_event.intent.expected_before_fingerprint) :
                  intent_event.intent.expected_before_fingerprint!=readback[index]) ||
                 intent_event.intent.desired_fingerprint!=original_fingerprint ||
                 observed_event.observation.operation_status!=S_OK ||

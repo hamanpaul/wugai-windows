@@ -32,12 +32,23 @@ $freshStatusOutput = @($bodyStatements | Where-Object {
         $command.CommandElements[1] -is [System.Management.Automation.Language.VariableExpressionAst] -and
         $command.CommandElements[1].VariablePath.UserPath -ceq 'readbackText'
 })
+$completionOutput = @($bodyStatements | Where-Object {
+    if ($_ -isnot [System.Management.Automation.Language.PipelineAst] -or
+        $_.PipelineElements.Count -ne 1 -or
+        $_.PipelineElements[0] -isnot [System.Management.Automation.Language.CommandAst]) { return $false }
+    $command = $_.PipelineElements[0]
+    $command.GetCommandName() -ceq 'Write-Output' -and $command.CommandElements.Count -eq 2 -and
+        $command.CommandElements[1] -is [System.Management.Automation.Language.StringConstantExpressionAst] -and
+        $command.CommandElements[1].Value.StartsWith('Installation complete.',[StringComparison]::Ordinal)
+})
 if ($registerAssignment.Count -ne 1 -or $freshStatusOutput.Count -ne 1 -or
-    $registerAssignment[0].Extent.StartOffset -ge $freshStatusOutput[0].Extent.EndOffset) {
+    $completionOutput.Count -ne 1 -or
+    $registerAssignment[0].Extent.StartOffset -ge $freshStatusOutput[0].Extent.EndOffset -or
+    $freshStatusOutput[0].Extent.EndOffset -ge $completionOutput[0].Extent.EndOffset) {
     throw 'Could not locate the installer register-to-fresh-status block.'
 }
 $start = $registerAssignment[0].Extent.StartOffset
-$length = $freshStatusOutput[0].Extent.EndOffset - $start
+$length = $completionOutput[0].Extent.EndOffset - $start
 $decision = [scriptblock]::Create($source.Substring($start, $length))
 
 $script:Passed = 0
@@ -53,13 +64,15 @@ function Invoke-ReadbackCase(
     [int]$StatusExit,
     [object]$StatusState,
     [bool]$ExpectedSuccess,
-    [string[]]$ExpectedCalls
+    [string[]]$ExpectedCalls,
+    [bool]$PublishFails = $false
 ) {
     $global:InstallReleaseFixtureCalls = [Collections.Generic.List[string]]::new()
     $global:InstallReleaseRegisterExit = $RegisterExit
     $global:InstallReleaseStatusExit = $StatusExit
     $global:InstallReleaseRegisterJson = $RegisterState | ConvertTo-Json -Compress -Depth 8
     $global:InstallReleaseStatusJson = $StatusState | ConvertTo-Json -Compress -Depth 8
+    $global:InstallReleasePublishFails = $PublishFails
 
     # The production decision block invokes this fixture just as it invokes
     # LiuKaiRegister.exe. It returns structured JSON and supplies each process
@@ -79,6 +92,19 @@ function Invoke-ReadbackCase(
         throw "Unexpected registration operation: $Operation"
     }
     $dll = 'FIXTURE:\BoshiamyTsf.dll'
+    $setup = 'FIXTURE:\Setup.exe'
+    $root = 'FIXTURE:\LiuKai'
+    $sid = 'S-1-5-21-1-2-3-1001'
+    $packageManifest = [pscustomobject]@{version='fixture-version'}
+    function Publish-WuGaiUninstaller {
+        param([string]$SetupPath,[string]$InstallRoot,[string]$Version,[string]$ExpectedUserSid)
+        $global:InstallReleaseFixtureCalls.Add('--publish-uninstaller')
+        if ($SetupPath -cne 'FIXTURE:\Setup.exe' -or $InstallRoot -cne 'FIXTURE:\LiuKai' -or
+            $Version -cne 'fixture-version' -or $ExpectedUserSid -cne 'S-1-5-21-1-2-3-1001') {
+            throw 'Uninstaller publication identity mismatch.'
+        }
+        if ($global:InstallReleasePublishFails) { throw 'fixture publication failure' }
+    }
     $accepted = $true
     try { $null = . $decision }
     catch { $accepted = $false }
@@ -94,7 +120,8 @@ $registerStale = [ordered]@{
 $freshGood = [ordered]@{
     registered = $true; immersive_supported = $true; input_mode_supported = $true; machine_com_registered = $true; machine_com = 0
 }
-Invoke-ReadbackCase 'stale register state, fresh status succeeds' 0 $registerStale 0 $freshGood $true @('--register','--status')
+Invoke-ReadbackCase 'stale register state, fresh status succeeds' 0 $registerStale 0 $freshGood $true @('--register','--status','--publish-uninstaller')
+Invoke-ReadbackCase 'uninstaller publication fails after healthy registration' 0 $registerStale 0 $freshGood $false @('--register','--status','--publish-uninstaller') $true
 
 $freshNotRegistered = [ordered]@{
     registered = $false; immersive_supported = $true; input_mode_supported = $true; machine_com_registered = $true; machine_com = 0
@@ -129,5 +156,38 @@ $freshMachineConflict = [ordered]@{
     machine_com_registered = $true; machine_com = 2147942413
 }
 Invoke-ReadbackCase 'machine HRESULT conflict cannot be hidden by boolean' 0 $registerStale 0 $freshMachineConflict $false @('--register','--status')
+
+# Exercise the actual recovery loop without invoking deployment, UAC, or the
+# registry. Recovery failure must prevent the subsequent deployment step.
+$recoveryLoops=@($bodyStatements | Where-Object {
+    $_ -is [Management.Automation.Language.ForEachStatementAst] -and
+    $_.Variable.VariablePath.UserPath -ceq 'recoveryRoot'
+})
+if ($recoveryLoops.Count -ne 1 -or $recoveryLoops[0].Extent.StartOffset -ge $registerAssignment[0].Extent.StartOffset) {
+    throw 'The interrupted-removal recovery loop is missing or runs too late.'
+}
+$recoveryBlock=[scriptblock]::Create($recoveryLoops[0].Extent.Text + "`nInvoke-FixtureDeployment")
+$root='C:\Fixture\LiuKai';$devRoot='C:\Fixture\LiuKaiDev';$sid='S-1-5-21-1-2-3-1001';$package='C:\Fixture\Package'
+$script:recoveryCalls=[Collections.Generic.List[string]]::new()
+$script:recoveryMarkers=@{}
+$script:recoveryFailure=$false
+function Get-WuGaiRemovalReceiptPath([string]$InstallRoot) { return ($InstallRoot+'.receipt') }
+function Test-Path([string]$LiteralPath) { return $script:recoveryMarkers.ContainsKey($LiteralPath) }
+function Recover-WuGaiMaintenancePublication([string]$InstallRoot,[string]$ExpectedUserSid) {
+    $script:recoveryCalls.Add('maintenance:'+ $InstallRoot)
+}
+function Recover-WuGaiInterruptedFileRemoval([string]$InstallRoot,[string]$ExpectedUserSid,[string]$Cli) {
+    $script:recoveryCalls.Add('files:'+ $InstallRoot)
+    if($script:recoveryFailure){throw 'Fixture recovery failure.'}
+}
+function Invoke-FixtureDeployment { $script:recoveryCalls.Add('deploy') }
+. $recoveryBlock
+Require (($script:recoveryCalls -join ',') -ceq 'deploy') 'Deployment without a receipt attempted recovery.'
+$script:recoveryCalls.Clear();$script:recoveryMarkers[$root+'.receipt']=$true;$script:recoveryMarkers[$devRoot+'.receipt']=$true
+. $recoveryBlock
+Require (($script:recoveryCalls -join ',') -ceq ('maintenance:'+ $root+',files:'+ $root+',maintenance:'+ $devRoot+',files:'+ $devRoot+',deploy')) 'Both root receipts were not recovered before deployment.'
+$script:recoveryCalls.Clear();$script:recoveryFailure=$true;$rejected=$false
+try {. $recoveryBlock} catch {$rejected=$true}
+Require ($rejected -and ($script:recoveryCalls -join ',') -ceq ('maintenance:'+ $root+',files:'+ $root)) 'A failed recovery did not stop deployment.'
 
 Write-Output "install_release_readback_tests_passed=$script:Passed"

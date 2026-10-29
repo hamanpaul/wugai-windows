@@ -262,7 +262,9 @@ public:
             query_=QueryStage::HomophoneSeed;composition_.clear();
         }
         if (is_root(c)) {
-            if (composition_.size() < 5) { composition_.push_back(c);raw_input_.push_back(raw_character); }
+            // Normal composition can also be committed literally with Enter;
+            // dictionary/query code length must not truncate that text.
+            if (query_ == QueryStage::None || composition_.size() < 5) { composition_.push_back(c);raw_input_.push_back(raw_character); }
             page_ = 0;
             refresh();
         } else if (c >= '0' && c <= '9') {
@@ -276,12 +278,12 @@ public:
                 // retain their separate role as code extensions.
                 composition_.clear();clear_query();page_ = 0;refresh();
             }
-            else if (!composition_.empty() && composition_.size() < 5) {
+            else if (!composition_.empty() && (query_ == QueryStage::None || composition_.size() < 5)) {
                 composition_.push_back(c);raw_input_.push_back(raw_character);
                 page_ = 0;
                 refresh();
             }
-        } else if (is_custom_aux(c) && !composition_.empty() && composition_.size() < 5) {
+        } else if (is_custom_aux(c) && !composition_.empty() && (query_ == QueryStage::None || composition_.size() < 5)) {
             composition_.push_back(c);raw_input_.push_back(raw_character);
             page_ = 0;
             refresh();

@@ -1,0 +1,47 @@
+name: Windows x64 release
+on:
+  push:
+    tags:
+      - 'r[0-9]*'
+permissions:
+  contents: write
+jobs:
+  build-and-release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          install: mingw-w64-x86_64-gcc mingw-w64-x86_64-binutils
+      - name: Validate tag and define release identity
+        shell: pwsh
+        run: |
+          $tag = '${{ github.ref_name }}'
+          if ($tag -cnotmatch '^r[0-9]+$') { throw 'Release tag must be r followed by digits.' }
+          $number = $tag.Substring(1)
+          "PACKAGE_VERSION=0.0.0-dev.$((Get-Date).ToUniversalTime().ToString('yyyyMMdd')).$tag.x64" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "SETUP_NAME=WuGai-R$number-x64-Setup.exe" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+      - name: Run isolated release preflight
+        shell: powershell
+        run: |
+          & .\native\test-release.ps1 -ToolchainBin 'C:\msys64\mingw64\bin' -WorkDir "$pwd\build\release-tests"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Build all components from source
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path dist -Force | Out-Null
+          & .\native\build-fresh-release.ps1 -ToolchainBin 'C:\msys64\mingw64\bin' -Version $env:PACKAGE_VERSION -OutputDir "$pwd\dist\release" -SetupName $env:SETUP_NAME
+      - name: Verify embedded files and checksums
+        shell: powershell
+        run: |
+          & .\native\verify-release.ps1 -ReleaseRoot "$pwd\dist\release" -SetupName $env:SETUP_NAME
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          @("source_commit=$env:GITHUB_SHA", "tag=$env:GITHUB_REF_NAME", "package_version=$env:PACKAGE_VERSION") | Set-Content -LiteralPath 'dist\release\SOURCE.txt' -Encoding UTF8
+      - name: Publish prerelease
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create $env:GITHUB_REF_NAME "dist/release/$env:SETUP_NAME" 'dist/release/SHA256SUMS.txt' 'dist/release/SOURCE.txt' --repo $env:GITHUB_REPOSITORY --verify-tag --prerelease --title "嘸．改 $($env:GITHUB_REF_NAME.ToUpperInvariant())（Windows x64）" --notes-file RELEASE_NOTES.md
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

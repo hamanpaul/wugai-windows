@@ -87,7 +87,7 @@ try {
         }
         $mode = 'upgrade'
     }
-    $arguments = @('--deploy-package',$package,$target,$oldVersion,$oldCli,$oldBrand)
+    $arguments = @('--deploy-package',$package,$target,$oldVersion,$oldCli,$oldBrand,'--diagnostic-trace')
     if ($MachineComX64) { $arguments += '--machine-com-x64' }
     $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
     $sid = $identity.User.Value

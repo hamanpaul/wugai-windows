@@ -45,9 +45,11 @@ Require (-not (Test-Path -LiteralPath $install)) 'planning created install root'
 $machineFresh = Run-Plan @('-MachineComX64')
 Require ($machineFresh.exit -eq 0) 'machine policy fresh plan failed'
 $machineJson = $machineFresh.text | ConvertFrom-Json
-Require ($machineJson.machine_com_x64 -eq $true -and $machineJson.command_arguments.Count -eq 7 -and
-    $machineJson.command_arguments[6] -ceq '--machine-com-x64') 'machine policy was not passed explicitly to CLI'
-Require ($freshJson.command_arguments.Count -eq 6 -and $freshJson.machine_com_x64 -eq $false) 'legacy plan unexpectedly opted into machine COM'
+Require ($machineJson.machine_com_x64 -eq $true -and $machineJson.command_arguments.Count -eq 8 -and
+    $machineJson.command_arguments[6] -ceq '--diagnostic-trace' -and
+    $machineJson.command_arguments[7] -ceq '--machine-com-x64') 'machine policy and trace were not passed in CLI order'
+Require ($freshJson.command_arguments.Count -eq 7 -and $freshJson.machine_com_x64 -eq $false -and
+    $freshJson.command_arguments[6] -ceq '--diagnostic-trace') 'legacy plan must retain trace without opting into machine COM'
 
 # Execute only the production report validator, never the deploying script.
 $astTokens = $null; $astErrors = $null

@@ -63,6 +63,7 @@ class WindowsInstallerBackend final : public Backend {
     std::wstring machine_sid_;
     std::wstring machine_install_root_;
     bool machine_writable_ = false;
+    bool machine_root_is_clsid_ = false;
     std::wstring clsid_name_;
     std::wstring owner_;
     SharedResourceStore& shared_;
@@ -310,15 +311,15 @@ class WindowsInstallerBackend final : public Backend {
            (!request.expected_x64_path.empty()&&!path_below_root(request.expected_x64_path,machine_install_root_)))return E_INVALIDARG;
         return S_OK;
     }
-    HRESULT clsid_path(std::wstring* path) const {
+    HRESULT clsid_path(Resource resource, std::wstring* path) const {
         if (clsid_name_.empty()) return E_INVALIDARG;
-        *path = L"CLSID\\" + clsid_name_;
+        *path = resource == Resource::machine_com_x64 && machine_root_is_clsid_ ? clsid_name_ : L"CLSID\\" + clsid_name_;
         return S_OK;
     }
     HRESULT capture_raw_com(Resource resource, bool* present, std::vector<BYTE>* snapshot) const {
         if (!present || !snapshot) return E_POINTER;
         if(!classes(resource)) { *present=false;snapshot->clear();return S_OK; }
-        std::wstring path; HRESULT hr = clsid_path(&path); if (FAILED(hr)) return hr;
+        std::wstring path; HRESULT hr = clsid_path(resource, &path); if (FAILED(hr)) return hr;
         Key key; LONG status = RegOpenKeyExW(classes(resource), path.c_str(), 0, KEY_READ, key.put());
         if (status == ERROR_FILE_NOT_FOUND || status == ERROR_PATH_NOT_FOUND) {
             *present = false; snapshot->clear(); return S_OK;
@@ -331,7 +332,7 @@ class WindowsInstallerBackend final : public Backend {
     }
     HRESULT capture_com(Resource resource, ResourceState* state, std::vector<BYTE>* snapshot) const {
         if(!classes(resource)) { *state=ResourceState{};snapshot->clear();return S_OK; }
-        std::wstring path; HRESULT hr = clsid_path(&path); if (FAILED(hr)) return hr;
+        std::wstring path; HRESULT hr = clsid_path(resource, &path); if (FAILED(hr)) return hr;
         Key key; LONG status = RegOpenKeyExW(classes(resource), path.c_str(), 0, KEY_READ, key.put());
         if (status == ERROR_FILE_NOT_FOUND || status == ERROR_PATH_NOT_FOUND) {
             *state = ResourceState{}; snapshot->clear(); return S_OK;
@@ -356,7 +357,7 @@ class WindowsInstallerBackend final : public Backend {
         return S_OK;
     }
     HRESULT clear_or_restore(Resource resource, const ResourceState& snapshot) {
-        std::wstring path; HRESULT hr = clsid_path(&path); if (FAILED(hr)) return hr;
+        std::wstring path; HRESULT hr = clsid_path(resource, &path); if (FAILED(hr)) return hr;
         if (!snapshot.present) {
             LONG status = RegDeleteTreeW(classes(resource), path.c_str());
             return status == ERROR_FILE_NOT_FOUND || status == ERROR_PATH_NOT_FOUND ? S_OK : win32(status);
@@ -388,7 +389,7 @@ class WindowsInstallerBackend final : public Backend {
         if (!desired.present) {
             if (!current.present) return S_FALSE;
             if (current.owner != owner_) return HRESULT_FROM_WIN32(ERROR_ALREADY_EXISTS);
-            const std::wstring clsid_path_value = L"CLSID\\" + clsid_name_;
+            std::wstring clsid_path_value; hr = clsid_path(resource, &clsid_path_value); if (FAILED(hr)) return hr;
             LONG status = delete_owned_tree_ ? delete_owned_tree_(classes(resource), clsid_path_value) :
                 RegDeleteTreeW(classes(resource), clsid_path_value.c_str());
             if (status != ERROR_SUCCESS) return failed_after_write(win32(status));
@@ -402,7 +403,7 @@ class WindowsInstallerBackend final : public Backend {
         if (desired.owner != owner_ || desired.threading_model != L"Apartment" || desired.path.empty()) return E_INVALIDARG;
         if (current.present && (current.owner != owner_ || current.threading_model != L"Apartment"))
             return HRESULT_FROM_WIN32(ERROR_ALREADY_EXISTS);
-        std::wstring path; hr = clsid_path(&path); if (FAILED(hr)) return hr;
+        std::wstring path; hr = clsid_path(resource, &path); if (FAILED(hr)) return hr;
         Key class_key; DWORD disposition = 0;
         LONG status = RegCreateKeyExW(classes(resource), path.c_str(), 0, nullptr, 0, KEY_READ | KEY_WRITE,
             nullptr, class_key.put(), &disposition);
@@ -467,10 +468,10 @@ public:
     WindowsInstallerBackend(HKEY classes64, HKEY classes32, REFCLSID clsid, std::wstring owner, SharedResourceStore& shared,
                             std::function<LONG(HKEY, const std::wstring&)> delete_owned_tree = {},
                             HKEY machine_classes64=nullptr,std::wstring machine_sid={},
-                            std::wstring machine_install_root={},bool machine_writable=false)
+                            std::wstring machine_install_root={},bool machine_writable=false,bool machine_root_is_clsid=false)
         : classes64_(classes64), classes32_(classes32), machine_classes64_(machine_classes64),
           machine_sid_(std::move(machine_sid)),machine_install_root_(std::move(machine_install_root)),
-          machine_writable_(machine_writable),owner_(std::move(owner)), shared_(shared),
+          machine_writable_(machine_writable),machine_root_is_clsid_(machine_root_is_clsid),owner_(std::move(owner)), shared_(shared),
           delete_owned_tree_(std::move(delete_owned_tree)) {
         wchar_t id[40]{};
         if (StringFromGUID2(clsid, id, 40) > 0) {
@@ -534,11 +535,13 @@ public:
         if(FAILED(hr))return hr;
         hr=open_classes_root(HKEY_CURRENT_USER,L"Software\\Classes",Resource::com_x86,requested_access,user32.put());
         if(FAILED(hr))return hr;
-        hr=open_classes_root(HKEY_LOCAL_MACHINE,L"Software\\Classes",Resource::machine_com_x64,
+        // The Classes parent can deny KEY_WRITE even for elevated admins.
+        // Open the actual CLSID parent and address only this product's GUID.
+        hr=open_classes_root(HKEY_LOCAL_MACHINE,L"Software\\Classes\\CLSID",Resource::machine_com_x64,
             machine_policy?requested_access:KEY_READ,machine64.put());
         if(FAILED(hr))return hr;
         std::unique_ptr<WindowsInstallerBackend> backend(new(std::nothrow) WindowsInstallerBackend(
-            user64.value,user32.value,clsid,std::move(owner),shared,{},machine64.value,std::move(sid),install_root,machine_policy&&writable));
+            user64.value,user32.value,clsid,std::move(owner),shared,{},machine64.value,std::move(sid),install_root,machine_policy&&writable,true));
         if(!backend)return E_OUTOFMEMORY;
         user64.value=nullptr;user32.value=nullptr;machine64.value=nullptr;
         if(FAILED(backend->ready()))return backend->ready();

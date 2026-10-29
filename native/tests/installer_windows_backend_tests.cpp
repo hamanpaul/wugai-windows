@@ -343,6 +343,23 @@ static int machine_com_fixture_tests(const std::wstring& v1,const std::wstring& 
     CHECK(shared.states==shared_before);
     std::wstring official_path;CHECK(read_server_path(machine,Resource::machine_com_x64,official,&official_path)==S_OK&&official_path==v1);
     CHECK(view_marker_is(machine,Resource::machine_com_x64,L"machine"));
+    // Production opens the machine CLSID parent directly, so it does not need
+    // write access to the broader Classes parent. Exercise creation/read/delete
+    // and ensure a neighboring CLSID survives in an isolated HKCU fixture.
+    HKEY scoped_user64=nullptr,scoped_user32=nullptr,scoped_machine=nullptr;
+    CHECK(WindowsInstallerBackend::open_classes_root(HKEY_CURRENT_USER,user64,Resource::com_x64,KEY_READ|KEY_WRITE,&scoped_user64)==S_OK);
+    CHECK(WindowsInstallerBackend::open_classes_root(HKEY_CURRENT_USER,user32,Resource::com_x86,KEY_READ|KEY_WRITE,&scoped_user32)==S_OK);
+    CHECK(WindowsInstallerBackend::open_classes_root(HKEY_CURRENT_USER,machine+L"\\CLSID",Resource::machine_com_x64,KEY_READ|KEY_WRITE,&scoped_machine)==S_OK);
+    WindowsInstallerBackend scoped(scoped_user64,scoped_user32,service,L"LiuKai-TSF-v1",shared,{},scoped_machine,sid,root,true,true);
+    auto scoped_request=legacy;scoped_request.include_machine_com_x64=true;
+    CHECK(install_or_repair(scoped,scoped_request).operation==S_OK);
+    CHECK(scoped.read(Resource::machine_com_x64,&unchanged)==S_OK&&unchanged.present&&unchanged.path==v1);
+    CHECK(read_server_path(machine,Resource::machine_com_x64,official,&official_path)==S_OK&&official_path==v1);
+    scoped_request.expected_x64_path=v1;
+    const auto scoped_removed=uninstall(scoped,scoped_request);
+    CHECK(scoped_removed.operation==S_OK&&scoped_removed.cleanup==S_OK);
+    CHECK(scoped.read(Resource::machine_com_x64,&unchanged)==S_OK&&!unchanged.present);
+    CHECK(read_server_path(machine,Resource::machine_com_x64,official,&official_path)==S_OK&&official_path==v1);
     return 0;
 }
 

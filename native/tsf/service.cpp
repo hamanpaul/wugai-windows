@@ -552,6 +552,7 @@ class Service final: public ITfTextInputProcessorEx, public ITfKeyEventSink, pub
   if(!defer_publication)publish_candidate(ctx);
  }
  HRESULT write_composition(ITfContext* ctx,TfEditCookie ec,ITfRange* range,const std::wstring& text){
+  if(text.size()>static_cast<std::size_t>(std::numeric_limits<LONG>::max()))return E_INVALIDARG;
   HRESULT hr=range->SetText(ec,0,text.data(),static_cast<LONG>(text.size()));if(FAILED(hr))return hr;
   ITfRange* caret=nullptr;hr=range->Clone(&caret);
   if(SUCCEEDED(hr))hr=caret->Collapse(ec,TF_ANCHOR_END);
@@ -598,6 +599,7 @@ class Service final: public ITfTextInputProcessorEx, public ITfKeyEventSink, pub
  }
  HRESULT apply_edit(ITfContext* ctx,TfEditCookie ec,const boshiamy::Outcome& out) {
   const std::wstring commit=to_wide(out.commit), composing=to_wide(boshiamy::composition_display(out.composition));
+  if(commit.size()>static_cast<std::size_t>(std::numeric_limits<LONG>::max())||composing.size()>static_cast<std::size_t>(std::numeric_limits<LONG>::max()))return E_INVALIDARG;
   if(!commit.empty()&&!composing.empty())return write_committed_prefix(ctx,ec,commit,composing);
   if(!out.commit.empty()) {
    if(composition){ITfRange* r=nullptr;HRESULT h=composition->GetRange(&r);if(SUCCEEDED(h))h=r->SetText(ec,0,commit.data(),(LONG)commit.size());if(FAILED(h)){if(r)r->Release();return h;}ITfComposition* old=composition;h=old->EndComposition(ec);clear_composition(old);if(SUCCEEDED(h)){h=r->Collapse(ec,TF_ANCHOR_END);if(SUCCEEDED(h)){TF_SELECTION selection{};selection.range=r;selection.style.ase=TF_AE_NONE;selection.style.fInterimChar=FALSE;h=ctx->SetSelection(ec,1,&selection);}}r->Release();return h;}
