@@ -39,8 +39,23 @@ jobs:
         shell: powershell
         run: |
           & .\native\verify-release.ps1 -ReleaseRoot "$pwd\dist\release" -SetupName $env:SETUP_NAME
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          @("source_commit=$env:GITHUB_SHA", "tag=$env:GITHUB_REF_NAME", "package_version=$env:PACKAGE_VERSION") | Set-Content -LiteralPath 'dist\release\SOURCE.txt' -Encoding UTF8
+          $compiler = Join-Path '${{ steps.msys.outputs.msys2-location }}' 'mingw64\bin\g++.exe'
+          $oldPath = $env:PATH
+          try {
+            $env:PATH = (Split-Path -Parent $compiler) + ';' + $oldPath
+            $compilerVersion = (& $compiler --version | Select-Object -First 1)
+            if ($LASTEXITCODE -ne 0) { throw 'Compiler identity query failed.' }
+          } finally { $env:PATH = $oldPath }
+          @("source_commit=$env:GITHUB_SHA", "tag=$env:GITHUB_REF_NAME", "package_version=$env:PACKAGE_VERSION", "compiler=$compilerVersion") | Set-Content -LiteralPath 'dist\release\SOURCE.txt' -Encoding UTF8
+      - name: Preserve verified release files
+        uses: actions/upload-artifact@v4
+        with:
+          name: verified-${{ github.ref_name }}
+          path: |
+            dist/release/${{ env.SETUP_NAME }}
+            dist/release/SHA256SUMS.txt
+            dist/release/SOURCE.txt
+          if-no-files-found: error
       - name: Publish prerelease
         shell: pwsh
         env:
