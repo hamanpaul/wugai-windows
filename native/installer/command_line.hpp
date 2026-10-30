@@ -4,12 +4,13 @@
 #include "durable_cli_session.hpp"
 #include "dev_host_package_migration.hpp"
 #include "deployment_access_preflight.hpp"
+#include "package_uninstall.hpp"
 #include <algorithm>
 #include <stdexcept>
 
 namespace boshiamy::installer {
 
-enum class InstallerAction { status, install, repair, uninstall, deploy_package, uninstall_x64, plan_display, repair_display, migrate_dev_host, rollback_dev_host_migration, inspect_dev_host_migration, check_deployment_access };
+enum class InstallerAction { status, install, repair, uninstall, deploy_package, uninstall_x64, plan_display, repair_display, migrate_dev_host, rollback_dev_host_migration, inspect_dev_host_migration, check_deployment_access, plan_uninstall_package, uninstall_package_registration };
 struct InstallerCommand {
     InstallerAction action;
     InstallRequest request;
@@ -83,11 +84,20 @@ inline InstallerCommand parse_installer_command(const std::vector<std::wstring>&
         const bool supported_action = !args.empty() &&
             (args[0] == L"--install" || args[0] == L"--repair" || args[0] == L"--uninstall" ||
              args[0] == L"--uninstall-x64" || args[0] == L"--deploy-package" ||
-             args[0] == L"--migrate-dev-host");
+             args[0] == L"--migrate-dev-host" || args[0] == L"--uninstall-package-registration");
         if (!supported_action)
             throw std::invalid_argument("--diagnostic-trace is supported only for TSF registration actions");
         args.pop_back();
         command.diagnostic_trace = true;
+    }
+    if (args.size()==2 && (args[0]==L"--plan-uninstall-package" || args[0]==L"--uninstall-package-registration")) {
+        if (!canonical_rollback_path(args[1])) throw std::invalid_argument("Package uninstall requires a canonical absolute root");
+        command.action=args[0]==L"--plan-uninstall-package" ? InstallerAction::plan_uninstall_package : InstallerAction::uninstall_package_registration;
+        command.deployment.install_root=args[1];
+        command.deployment.include_machine_com_x64=true;
+        command.request.include_machine_com_x64=true;
+        command.request.include_x86=false;
+        return command;
     }
     if(args.size()==1&&args[0]==L"--status") {
         command.action=InstallerAction::status;
@@ -232,13 +242,20 @@ inline HRESULT validate_installer_expectations(Backend& backend,const InstallerC
     return S_OK;
 }
 
-inline LifecycleResult execute_installer_command(Backend& backend,const InstallerCommand& command) {
+inline LifecycleResult execute_installer_command(Backend& backend,const InstallerCommand& command,
+        package_uninstall::Report* removal_report=nullptr,package_categories::Store* categories=nullptr) {
     dev_host_migration_history::Lock lifecycle_lock;
     const bool mutating=command.action!=InstallerAction::status&&command.action!=InstallerAction::check_deployment_access&&
-        command.action!=InstallerAction::plan_display&&command.action!=InstallerAction::inspect_dev_host_migration;
+        command.action!=InstallerAction::plan_display&&command.action!=InstallerAction::inspect_dev_host_migration&&
+        command.action!=InstallerAction::plan_uninstall_package;
     if(mutating) {
         const HRESULT acquired=lifecycle_lock.acquire();
         if(acquired!=S_OK)return {acquired,S_OK};
+    }
+    if(command.action==InstallerAction::plan_uninstall_package || command.action==InstallerAction::uninstall_package_registration) {
+        package_uninstall::Report ignored;
+        return package_uninstall::run(backend,command.deployment.install_root,
+            command.action==InstallerAction::uninstall_package_registration,removal_report?removal_report:&ignored,categories);
     }
     if(command.action==InstallerAction::migrate_dev_host)
         return dev_host_package_migration::execute(backend,

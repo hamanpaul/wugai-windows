@@ -102,6 +102,16 @@ const char* trace_stage_name(boshiamy::installer::SharedStoreTraceStage stage) {
     case SharedStoreTraceStage::MarkerRemove:return "marker_remove";
     case SharedStoreTraceStage::FinalReadback:return "final_readback";
     case SharedStoreTraceStage::FinalVerification:return "final_verification";
+    case SharedStoreTraceStage::ProfileReadback:return "profile_readback";
+    case SharedStoreTraceStage::RegisterProfile:return "register_profile";
+    case SharedStoreTraceStage::UnregisterProfile:return "unregister_profile";
+    case SharedStoreTraceStage::ProfileIconReadback:return "profile_icon_readback";
+    case SharedStoreTraceStage::ProfileUserStateRestore:return "profile_user_state_restore";
+    case SharedStoreTraceStage::ProfileUserStateReadback:return "profile_user_state_readback";
+    case SharedStoreTraceStage::ProfileUserStateVerification:return "profile_user_state_verification";
+    case SharedStoreTraceStage::FinalUserStateVerification:return "final_user_state_verification";
+    case SharedStoreTraceStage::FinalMarkerVerification:return "final_marker_verification";
+    case SharedStoreTraceStage::PostApplyVerification:return "post_apply_verification";
     default:return "unknown";
     }
 }
@@ -115,25 +125,56 @@ void diagnostic_trace_json(const boshiamy::installer::SharedStoreTrace& trace) {
                   << trace_phase_name(event.phase) << "\",\"resource\":\"" << resource_name(event.resource)
                   << "\",\"hr\":" << static_cast<uint32_t>(event.status)
                   << ",\"present_known\":" << (event.present_known ? "true" : "false")
-                  << ",\"capabilities_known\":" << (event.capabilities_known ? "true" : "false");
+                  << ",\"capabilities_known\":" << (event.capabilities_known ? "true" : "false")
+                  << ",\"user_state_known\":" << (event.user_state_known ? "true" : "false");
         if (event.present_known) std::cout << ",\"present\":" << (event.present ? "true" : "false");
         if (event.capabilities_known) std::cout << ",\"capabilities\":" << event.capabilities;
         if (event.required_capability) std::cout << ",\"required_capability\":" << event.required_capability;
+        if (event.user_state_known) std::cout << ",\"enabled\":" << (event.enabled ? "true" : "false")
+                                            << ",\"is_default\":" << (event.is_default ? "true" : "false");
         std::cout << '}';
     }
     std::cout << "],\"dropped_count\":" << trace.dropped_count() << '}';
 }
+void package_uninstall_json(const boshiamy::installer::package_uninstall::Report& report, bool verified_absent) {
+    using namespace boshiamy::installer;
+    std::wstring sid;
+    deployment_access::WindowsApi identity;
+    identity.process_user_sid(&sid);
+    std::cout << ",\"package_uninstall\":{\"schema_version\":1,\"executed\":" << (report.executed?"true":"false")
+              << ",\"registrations_absent\":" << (verified_absent?"true":"false") << ",\"install_root\":";
+    json_string(report.root.wstring());
+    std::cout << ",\"user_sid\":"; json_string(sid);
+    std::cout << ",\"version\":"; json_string(files::detail::widen_ascii(report.installed.version));
+    std::cout << ",\"manifest_sha256\":"; json_string(files::detail::widen_ascii(report.installed.manifest_sha256));
+    std::cout << ",\"inventory_fingerprint\":"; json_string(files::detail::widen_ascii(report.inventory_fingerprint));
+    std::cout << ",\"failure_stage\":"; json_string(files::detail::widen_ascii(report.failure_stage));
+    std::cout << ",\"modern_category_cleanup_started\":" << (report.modern_category_cleanup_started?"true":"false");
+    std::cout << ",\"files\":[";
+    for (size_t i=0;i<report.inventory.size();++i) {
+        if (i) std::cout << ',';
+        const auto& file=report.inventory[i];
+        std::cout << "{\"relative_path\":"; json_string(files::detail::widen_ascii(file.relative_path));
+        std::cout << ",\"sha256\":"; json_string(files::detail::widen_ascii(file.sha256));
+        std::cout << ",\"bytes\":" << file.bytes << '}';
+    }
+    std::cout << "]}";
+}
 HRESULT status_report(boshiamy::installer::Backend& backend,boshiamy::installer::TsfSharedApi& api,HRESULT operation,HRESULT cleanup,
-                      const boshiamy::installer::SharedStoreTrace* trace,bool machine_policy=false) {
+                      const boshiamy::installer::SharedStoreTrace* trace,bool machine_policy=false,
+                      const boshiamy::installer::package_uninstall::Report* removal=nullptr,
+                      boshiamy::installer::package_categories::Store* categories=nullptr) {
     using namespace boshiamy::installer;
     const SystemTrayObservation tray=observe_system_tray(api);
     std::cout<<"{\"kind\":\"windows-installer-lifecycle\",\"operation\":"
              <<static_cast<unsigned long>(operation)<<",\"cleanup\":"<<static_cast<unsigned long>(cleanup)
              <<",\"scope\":\""<<(machine_policy?"user-and-machine-com-x64":"current-user")<<"\",\"resources\":[";
     HRESULT read_result=S_OK;
+    bool all_absent=true;
     for(size_t i=0;i<static_cast<size_t>(Resource::count);++i) {
         ResourceState state{};const auto resource=static_cast<Resource>(i);
         const HRESULT observed=backend.read(resource,&state);
+        all_absent=all_absent&&observed==S_OK&&state==ResourceState{};
         if(observed!=S_OK&&read_result==S_OK)read_result=observed;
         if(i)std::cout<<',';
         std::cout<<"{\"name\":\""<<resource_name(resource)<<"\",\"read_result\":"<<static_cast<unsigned long>(observed)
@@ -169,14 +210,46 @@ HRESULT status_report(boshiamy::installer::Backend& backend,boshiamy::installer:
              <<",\"system_tray_category_result\":"<<static_cast<unsigned long>(tray.category_status)
              <<",\"system_tray_category_present\":"<<(tray.category_status==S_OK?(tray.category_present?"true":"false"):"null")
              <<",\"system_tray_supported\":"<<support_state_json(tray.support);
+    if(categories) {
+        package_categories::Categories present_categories;
+        const HRESULT category_result=categories->read(&present_categories);
+        if(category_result!=S_OK&&read_result==S_OK)read_result=category_result;
+        all_absent=all_absent&&category_result==S_OK&&present_categories.empty();
+        std::cout << ",\"all_categories_result\":" << static_cast<unsigned long>(category_result)
+                  << ",\"all_categories_count\":";
+        if(category_result==S_OK)std::cout << present_categories.size();else std::cout << "null";
+        // An API enumeration that omits a malformed profile cannot authorize
+        // file deletion while either exact registry leaf remains.
+        if(profile_absent) {
+            profile_uninstall::WindowsStore raw(boshiamy::profile_display::windows_detail::profile_key_path());
+            profile_uninstall::UserState user;
+            bool machine=false;
+            HRESULT raw_result=raw.machine_present(&machine);
+            if(raw_result==S_OK)raw_result=raw.read_user(&user);
+            if(raw_result==S_OK&&(machine||user.present))raw_result=HRESULT_FROM_WIN32(ERROR_REVISION_MISMATCH);
+            if(raw_result!=S_OK&&read_result==S_OK)read_result=raw_result;
+            all_absent=all_absent&&raw_result==S_OK;
+            std::cout << ",\"profile_registry_absence_result\":" << static_cast<unsigned long>(raw_result);
+        }
+    }
+    if(removal&&removal->registrations_absent&&!all_absent&&read_result==S_OK)
+        read_result=HRESULT_FROM_WIN32(ERROR_REVISION_MISMATCH);
     std::cout << ",\"readback\":" << static_cast<unsigned long>(read_result);
     if (trace) diagnostic_trace_json(*trace);
+    if (removal) package_uninstall_json(*removal,removal->registrations_absent&&all_absent&&
+        read_result==S_OK&&operation==S_OK&&cleanup==S_OK);
     std::cout<<"}\n";
     return read_result;
 }
 }
 int wmain(int argc,wchar_t** argv) {
     using namespace boshiamy::installer;
+    if(argc==2 && std::wstring(argv[1])==independent_categories::child_argument)
+        return independent_categories::child_main();
+    if(argc==2 && std::wstring(argv[1])==independent_categories::caps_argument)
+        return independent_categories::caps_child_main();
+    if(argc==2 && std::wstring(argv[1])==independent_categories::profile_argument)
+        return independent_categories::profile_child_main();
     try {
         std::vector<std::wstring> args;
         for(int i=1;i<argc;++i)args.emplace_back(argv[i]);
@@ -199,9 +272,11 @@ int wmain(int argc,wchar_t** argv) {
         std::wstring managed_root;
         if(machine_policy&&command.action==InstallerAction::deploy_package)
             managed_root=command.deployment.install_root.lexically_normal().wstring();
-        if(machine_policy&&command.action==InstallerAction::uninstall_x64)
+        if(machine_policy&&(command.action==InstallerAction::uninstall_x64||
+            command.action==InstallerAction::plan_uninstall_package||command.action==InstallerAction::uninstall_package_registration))
             managed_root=command.deployment.install_root.wstring();
-        const bool read_only=command.action==InstallerAction::status||command.action==InstallerAction::inspect_dev_host_migration;
+        const bool read_only=command.action==InstallerAction::status||command.action==InstallerAction::inspect_dev_host_migration||
+            command.action==InstallerAction::plan_uninstall_package;
         dev_host_migration_history::Lock entry_lock;
         if(!read_only) {
             const HRESULT acquired=entry_lock.acquire();
@@ -209,7 +284,7 @@ int wmain(int argc,wchar_t** argv) {
         }
         HRESULT result=WindowsInstallerBackend::open_scope(kInstallerTsfClsid,command.request.owner,shared,&backend,
             machine_policy,managed_root,read_only?KEY_READ:KEY_READ|KEY_WRITE);
-        if(FAILED(result)){std::cerr<<"Cannot open explicit COM scope\n";return 1;}
+        if(FAILED(result)){std::cerr<<"Cannot open explicit COM scope (HRESULT=" << static_cast<uint32_t>(result) << ")\n";return 1;}
         // Legacy migration/recovery commands have no machine-scope ledger. They
         // must not change one half of a tracked paired registration.
         if(command.action==InstallerAction::migrate_dev_host||command.action==InstallerAction::rollback_dev_host_migration) {
@@ -303,14 +378,37 @@ int wmain(int argc,wchar_t** argv) {
             std::cout<<"}\n";
             return lifecycle_exit_code(transaction.operation,transaction.cleanup,observed);
         }
-        const auto transaction=execute_installer_command(*backend,command);
+        const bool package_removal=command.action==InstallerAction::plan_uninstall_package||
+            command.action==InstallerAction::uninstall_package_registration;
+        package_uninstall::Report removal;
+        package_categories::WindowsStore categories;
+        auto transaction=execute_installer_command(*backend,command,package_removal?&removal:nullptr,&categories);
+        if(command.action==InstallerAction::uninstall_package_registration) {
+            // Reopen both TSF managers and registry adapters. The package wrapper
+            // additionally checks --status in a separate process before deletion.
+            WindowsTsfSharedApi verified_api;
+            WindowsTsfSharedStore verified_shared(verified_api,markers,command.request.owner);
+            std::unique_ptr<WindowsInstallerBackend> verified_backend;
+            HRESULT verified=verified_api.ready();
+            if(verified==S_OK) verified=WindowsInstallerBackend::open_scope(kInstallerTsfClsid,
+                command.request.owner,verified_shared,&verified_backend,true,managed_root,KEY_READ);
+            if(verified==S_OK) {
+                package_categories::WindowsStore verified_categories;
+                const HRESULT observed=status_report(*verified_backend,verified_api,transaction.operation,transaction.cleanup,
+                    command.diagnostic_trace?&trace:nullptr,true,&removal,&verified_categories);
+                return lifecycle_exit_code(transaction.operation,transaction.cleanup,observed);
+            }
+            if(transaction.operation==S_OK)transaction.operation=verified;
+            removal.failure_stage="independent-registration-readback";
+        }
         const HRESULT observed=status_report(*backend,api,transaction.operation,transaction.cleanup,
-            command.diagnostic_trace?&trace:nullptr,machine_policy);
+            command.diagnostic_trace?&trace:nullptr,machine_policy,package_removal?&removal:nullptr,&categories);
         return lifecycle_exit_code(transaction.operation,transaction.cleanup,observed);
     } catch(const std::exception& error) {
         std::cerr<<error.what()<<"\nUsage: LiuKaiInstaller --status [--machine-com-x64] OR "
             "--install|--repair|--uninstall <x64 DLL> <x86 DLL> <stable icon DLL> <expected old x64 DLL|-> <expected old x86 DLL|-> OR "
             "--uninstall-x64 <expected old x64 DLL> [--machine-com-x64] OR "
+            "--plan-uninstall-package <managed root> OR --uninstall-package-registration <managed root> [--diagnostic-trace] OR "
             "--migrate-dev-host <x64 package root> <new managed root> <expected old x64 DLL> <expected old DLL SHA-256> OR "
             "--rollback-dev-host-migration <managed root> <ledger dir> <expected token> <forward journal SHA-256> <original snapshot SHA-256> OR "
             "--inspect-dev-host-migration <managed root> <ledger dir> <expected token> <forward journal SHA-256> <original snapshot SHA-256> OR "

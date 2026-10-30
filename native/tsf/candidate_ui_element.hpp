@@ -218,7 +218,7 @@ public:
     HRESULT STDMETHODCALLTYPE GetSelection(UINT* out) override {
         if(!out)return E_POINTER;
         std::lock_guard<std::mutex> lock(mutex_);
-        if(data_.strings.empty()){*out=0;return S_OK;}
+        if(data_.strings.empty()){*out=0;return S_FALSE;}
         *out=data_.selection;return S_OK;
     }
     HRESULT STDMETHODCALLTYPE SetSelection(UINT index) override {
@@ -292,10 +292,10 @@ public:
         std::lock_guard<std::mutex> lock(mutex_);
         const UINT needed=static_cast<UINT>(data_.page_starts.size());
         *count=needed;
-        if(capacity&& !indices)return E_POINTER;
-        const UINT copy=std::min(capacity,needed);
-        for(UINT i=0;i<copy;++i)indices[i]=data_.page_starts[i];
-        return needed&&capacity<=needed?S_FALSE:S_OK;
+        if(!indices)return S_OK;
+        if(capacity < needed)return E_INVALIDARG;
+        for(UINT i=0;i<needed;++i)indices[i]=data_.page_starts[i];
+        return S_OK;
     }
     HRESULT STDMETHODCALLTYPE SetPageIndex(UINT* indices,UINT count) override {
         if(!indices)return E_POINTER;

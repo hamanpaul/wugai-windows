@@ -127,12 +127,13 @@ inline HRESULT inspect_machine_history(const fs::path& root,const std::string& o
             journal::Store store(journal_path,identity);
             journal::Document document;
             if(store.read(identity,&document)!=S_OK)return uncertain;
-            bool terminal=false,registration_terminal=false;
+            bool terminal=false,registration_terminal=false,final_snapshot=false;
             for(const auto& item:fs::directory_iterator(entry.path())) {
                 if(!item.is_regular_file()||!files::detail::absolute_no_reparse(item.path(),true))return uncertain;
                 const auto name=item.path().filename();
                 if(name==L"terminal-compensation.journal")terminal=true;
                 else if(name==L"terminal-registration-compensation.journal")registration_terminal=true;
+                else if(name==L"transaction.final.snapshot")final_snapshot=true;
                 else if(name!=L"transaction.journal"&&name!=L"transaction.snapshot")return uncertain;
             }
             if(terminal||registration_terminal) {
@@ -171,6 +172,16 @@ inline HRESULT inspect_machine_history(const fs::path& root,const std::string& o
             ResourceStates pre{};
             std::string hash;
             if(snapshot_store.read(identity,&pre,&hash)!=S_OK||hash!=capture.desired_fingerprint)return uncertain;
+            if(final_snapshot) {
+                if(capture.action!="capture-install-or-repair"||document.events.back().kind!=Kind::commit)return uncertain;
+                snapshot::Store final_store(entry.path()/L"transaction.final.snapshot",identity);
+                ResourceStates final_state{};std::string encoded;journal::detail::Digest digest{};
+                if(final_store.read(identity,&final_state)!=S_OK||!snapshot::detail::encode(identity,final_state,&encoded)||
+                   !journal::detail::sha256(encoded,&digest))return uncertain;
+                static constexpr char digits[]="0123456789abcdef";std::string final_hash;
+                for(auto byte:digest){final_hash.push_back(digits[byte>>4]);final_hash.push_back(digits[byte&15]);}
+                if(final_hash!=document.events.back().commit_fingerprint)return uncertain;
+            }
         }
         return S_OK;
     }catch(...){return uncertain;}

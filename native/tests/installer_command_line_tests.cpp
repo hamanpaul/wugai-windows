@@ -120,6 +120,18 @@ static int machine_com_x64_argument_tests() {
 
 int main() {
     CHECK(machine_com_x64_argument_tests()==0);
+    for(const auto* action:{L"--plan-uninstall-package",L"--uninstall-package-registration"}) {
+        const auto command=parse_installer_command({action,L"C:\\Program Files\\LiuKai"});
+        CHECK(command.request.include_machine_com_x64&&!command.request.include_x86);
+        CHECK(command.deployment.install_root==std::filesystem::path(L"C:\\Program Files\\LiuKai"));
+        for(const auto* root:{L"relative",L"C:\\",L"C:\\LiuKai\\..\\Other",L"C:\\LiuKai\\"}) {
+            bool refused=false;try{parse_installer_command({action,root});}catch(const std::invalid_argument&){refused=true;}
+            CHECK(refused);
+        }
+        bool extra=false;try{parse_installer_command({action,L"C:\\LiuKai",L"--machine-com-x64"});}catch(const std::invalid_argument&){extra=true;}
+        CHECK(extra);
+    }
+    CHECK(parse_installer_command({L"--uninstall-package-registration",L"C:\\LiuKai",L"--diagnostic-trace"}).diagnostic_trace);
     const std::vector<std::wstring> install_args={L"--install",L"C:\\LiuKai\\x64\\service.dll",L"C:\\LiuKai\\x86\\service.dll",L"C:\\LiuKai\\shared\\icons.dll",L"-",L"-"};
     const auto install=parse_installer_command(install_args);
     CHECK(install.request.owner==L"LiuKai-TSF-v1");

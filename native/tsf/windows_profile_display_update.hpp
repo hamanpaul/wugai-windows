@@ -131,6 +131,26 @@ inline std::wstring com_key_path() {
     return L"Software\\Classes\\CLSID\\" + guid_text(boshiamy::kServiceClsid);
 }
 
+// Lifecycle installation needs the icon binding, not a complete display-edit
+// snapshot. A freshly registered Windows profile can omit the settings UI
+// DWORDs; requiring them here makes successful RegisterProfile look like a
+// failed installation. Keep the full metadata reader below strict for edits.
+inline HRESULT read_profile_icon_path(HKEY hive, const std::wstring& key_path,
+                                     std::wstring* path) {
+    if (!path) return E_POINTER;
+    path->clear();
+    RegistryKey key;
+    const LONG status = RegOpenKeyExW(hive, key_path.c_str(), 0,
+        KEY_QUERY_VALUE | KEY_WOW64_64KEY, key.put());
+    if (status != ERROR_SUCCESS) return HRESULT_FROM_WIN32(status);
+    std::wstring observed;
+    const HRESULT hr = read_reg_string(key.get(), L"IconFile", &observed);
+    if (hr != S_OK) return hr;
+    if (observed.empty()) return HRESULT_FROM_WIN32(ERROR_INVALID_DATA);
+    *path = std::move(observed);
+    return S_OK;
+}
+
 inline HRESULT read_profile_metadata(ProfileMetadata* metadata) {
     if (!metadata) return E_POINTER;
     RegistryKey key;

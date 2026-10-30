@@ -25,6 +25,11 @@ function Assert-MachineComCliStatus([object]$Status) {
         throw 'Packaged lifecycle CLI cannot independently read the explicit HKLM64 COM resource.'
     }
 }
+function Assert-MachineComCliExit([int]$Code,[string]$Output) {
+    if ($Code -ne 0) {
+        throw "Machine COM status check failed (exit $Code); deployment has not started. CLI output: $Output"
+    }
+}
 function Read-ExactUtf8([string]$Path) {
     $bytes = [IO.File]::ReadAllBytes($Path)
     $utf8 = New-Object System.Text.UTF8Encoding($false,$true)
@@ -87,7 +92,7 @@ try {
         }
         $mode = 'upgrade'
     }
-    $arguments = @('--deploy-package',$package,$target,$oldVersion,$oldCli,$oldBrand)
+    $arguments = @('--deploy-package',$package,$target,$oldVersion,$oldCli,$oldBrand,'--diagnostic-trace')
     if ($MachineComX64) { $arguments += '--machine-com-x64' }
     $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
     $sid = $identity.User.Value
@@ -108,7 +113,7 @@ try {
     }
     if ($MachineComX64) {
         $scopeText = & $cli '--status' '--machine-com-x64' 2>&1 | Out-String
-        if ($LASTEXITCODE -ne 0) { throw 'Packaged CLI lacks the requested machine COM lifecycle policy; deployment has not started.' }
+        Assert-MachineComCliExit $LASTEXITCODE $scopeText
         Assert-MachineComCliStatus ($scopeText | ConvertFrom-Json)
     }
     $accessText = & $cli '--check-deployment-access' $sid 2>&1 | Out-String

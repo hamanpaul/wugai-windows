@@ -1,0 +1,106 @@
+name: Windows x64 WiX release
+on:
+  push:
+    tags:
+      - 'r[0-9]*'
+permissions:
+  contents: write
+jobs:
+  build-and-release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: msys2/setup-msys2@v2
+        id: msys
+        with:
+          msystem: MINGW64
+          install: mingw-w64-x86_64-gcc mingw-w64-x86_64-binutils
+      - name: Validate tag and define release identity
+        shell: pwsh
+        run: |
+          $tag = '${{ github.ref_name }}'
+          if ($tag -cnotmatch '^r([1-9][0-9]*)$') { throw 'Release tag must be r followed by a positive number without leading zeroes.' }
+          $number = [uint64]::Parse($Matches[1])
+          if ($number -gt 65535) { throw 'Release number exceeds the MSI build version limit.' }
+          "PACKAGE_VERSION=0.0.0-dev.$((Get-Date).ToUniversalTime().ToString('yyyyMMdd')).$tag.x64" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "MSI_VERSION=1.0.$number" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+      - name: Acquire and verify WiX 6.0.2
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $tools = Join-Path $pwd 'build\toolchain'
+          New-Item -ItemType Directory -Path $tools -Force | Out-Null
+          gh release download v6.0.2 --repo wixtoolset/wix --pattern 'wix-cli-x64.msi' --dir $tools
+          if ($LASTEXITCODE -ne 0) { throw 'WiX download failed.' }
+          $msi = Join-Path $tools 'wix-cli-x64.msi'
+          if ((Get-FileHash -LiteralPath $msi -Algorithm SHA256).Hash.ToLowerInvariant() -cne 'a8a5cc7443353cef3ab900c60cd7a3a5ee601746319d104ac7b12ad0ced2345c') { throw 'Unexpected WiX MSI hash.' }
+          $extract = Join-Path $tools 'wix6-extracted'
+          New-Item -ItemType Directory -Path $extract | Out-Null
+          $p = Start-Process msiexec.exe -ArgumentList @('/a', ('"'+$msi+'"'), '/qn', ('TARGETDIR="'+$extract+'"')) -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "WiX extraction failed: $($p.ExitCode)" }
+          $wix = Join-Path $extract 'PFiles64\WiX Toolset v6.0\bin\wix.exe'
+          Push-Location $tools
+          try { & $wix extension add 'WixToolset.Bal.wixext/6.0.2'; if ($LASTEXITCODE -ne 0) { throw 'Burn extension download failed.' } }
+          finally { Pop-Location }
+          "WIX_EXE=$wix" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "WIX_BAL=$(Join-Path $tools '.wix\extensions\WixToolset.Bal.wixext\6.0.2\wixext6\WixToolset.BootstrapperApplications.wixext.dll')" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+      - name: Run release preflight and WiX TLS regression
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $toolchain = Join-Path '${{ steps.msys.outputs.msys2-location }}' 'mingw64\bin'
+          $env:PATH = $toolchain + ';' + $env:PATH
+          & .\native\test-release.ps1 -ToolchainBin $toolchain -WorkDir "$pwd\build\release-tests"
+          if ($LASTEXITCODE -ne 0) { throw 'Release tests failed.' }
+          & .\native\tests\wix-tls-detach-tests.ps1 -ToolchainBin $toolchain -WorkDir "$pwd\build\wix-tls-test"
+          if ($LASTEXITCODE -ne 0) { throw 'WiX TLS regression failed.' }
+          foreach ($name in @('wix-legacy-recovery-policy-tests.ps1','wix-legacy-recovery-transaction-tests.ps1','wix-legacy-recovery-backup-tests.ps1','wix-legacy-recovery-registry-tests.ps1','wix-legacy-recovery-adapter-tests.ps1','wix-legacy-owner-marker-tests.ps1')) {
+            & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path 'native\tests' $name)
+            if ($LASTEXITCODE -ne 0) { throw "Legacy safety test failed: $name" }
+          }
+      - name: Build product files from source
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory -Path dist -Force | Out-Null
+          $toolchain = Join-Path '${{ steps.msys.outputs.msys2-location }}' 'mingw64\bin'
+          $env:PATH = $toolchain + ';' + $env:PATH
+          & .\native\build-fresh-release.ps1 -ToolchainBin $toolchain -Version $env:PACKAGE_VERSION -OutputDir "$pwd\dist\source" -SetupName "WuGai-$($env:GITHUB_REF_NAME)-x64-Setup.exe"
+      - name: Build and verify WiX installer
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $toolchain = Join-Path '${{ steps.msys.outputs.msys2-location }}' 'mingw64\bin'
+          $env:PATH = $toolchain + ';' + $env:PATH
+          & .\native\wix\build-installer.ps1 -WixExe $env:WIX_EXE -BalExtension $env:WIX_BAL -SourceBundle "$pwd\dist\source\bundle" -OutputDir "$pwd\dist\wix" -ToolchainBin $toolchain -MsiVersion $env:MSI_VERSION -PublishBuild
+          $files = @('LiuKai-win-setup.exe','LiuKai.msi')
+          $sums = foreach ($name in $files) { "$((Get-FileHash -LiteralPath (Join-Path 'dist\wix' $name) -Algorithm SHA256).Hash.ToLowerInvariant())  $name" }
+          [IO.File]::WriteAllLines("$pwd\dist\wix\SHA256SUMS.txt", [string[]]$sums, [Text.UTF8Encoding]::new($false))
+          @("source_commit=$env:GITHUB_SHA", "tag=$env:GITHUB_REF_NAME", "package_version=$env:PACKAGE_VERSION", "msi_version=$env:MSI_VERSION", 'wix=6.0.2') | Set-Content -LiteralPath 'dist\wix\SOURCE.txt' -Encoding UTF8
+      - name: Test early failure diagnostics and staging cleanup
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $toolchain = Join-Path '${{ steps.msys.outputs.msys2-location }}' 'mingw64\bin'
+          $env:PATH = $toolchain + ';' + $env:PATH
+          & .\native\tests\wix-early-collector-tests.ps1 -ToolchainBin $toolchain -WorkDir "$pwd\build\early-diagnostic-test" -Msi "$pwd\dist\wix\LiuKai.msi" -ExpectedScript "$pwd\native\collect-install-diagnostics.ps1"
+          if ($LASTEXITCODE -ne 0) { throw 'Early diagnostics test failed.' }
+      - name: Preserve verified release files
+        uses: actions/upload-artifact@v4
+        with:
+          name: verified-${{ github.ref_name }}
+          path: |
+            dist/wix/LiuKai-win-setup.exe
+            dist/wix/LiuKai.msi
+            dist/wix/SHA256SUMS.txt
+            dist/wix/SOURCE.txt
+          if-no-files-found: error
+      - name: Publish prerelease
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create $env:GITHUB_REF_NAME 'dist/wix/LiuKai-win-setup.exe' 'dist/wix/LiuKai.msi' 'dist/wix/SHA256SUMS.txt' 'dist/wix/SOURCE.txt' --repo $env:GITHUB_REPOSITORY --verify-tag --prerelease --title "嘸．改 $($env:GITHUB_REF_NAME.ToUpperInvariant())（Windows x64）" --notes-file RELEASE_NOTES.md
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

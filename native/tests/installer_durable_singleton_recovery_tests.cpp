@@ -25,6 +25,9 @@ struct FakeBackend final : installer::Backend {
     size_t health_calls = 0;
     installer::Resource fail_apply=installer::Resource::count;
     bool partial_failure=false;
+    bool unreadable_after_partial_failure=false;
+    bool shared_projection=false;
+    HRESULT apply_failure=E_ACCESSDENIED;
     HRESULT prepare_apply_targets(installer::TransactionOperation,const installer::InstallRequest& request,
             const installer::ResourceStates&,installer::ResourceStates* desired) override {
         if (!desired) return E_POINTER;
@@ -42,6 +45,10 @@ struct FakeBackend final : installer::Backend {
             if (state.private_data.size()<7 || state.private_data[0]!=0x53) return E_INVALIDARG;
             out->private_data.resize(7); // fake canonical SID/root, excluding raw metadata
         }
+        if (shared_projection && (resource==installer::Resource::profile ||
+                resource==installer::Resource::keyboard_category || resource==installer::Resource::system_tray_category ||
+                resource==installer::Resource::ui_element_category))
+            out->private_data={'L','K','S','A','P','P','L','Y',1,0,0,0};
         return S_OK;
     }
     HRESULT read(installer::Resource resource, installer::ResourceState* state) override {
@@ -54,7 +61,11 @@ struct FakeBackend final : installer::Backend {
         ++writes;
         if (resource==fail_apply) {
             if (partial_failure) states[static_cast<size_t>(resource)] = state;
-            return E_ACCESSDENIED;
+            if (unreadable_after_partial_failure) {
+                fail_read=resource;
+                read_result=HRESULT_FROM_WIN32(ERROR_RETRY);
+            }
+            return apply_failure;
         }
         states[static_cast<size_t>(resource)] = state;
         return S_OK;
@@ -69,6 +80,47 @@ struct FakeBackend final : installer::Backend {
         return health_result;
     }
 };
+
+static bool test_ambiguous_profile_is_not_cleaned(const fs::path& package, const fs::path& sandbox) {
+    CHECK(fs::create_directories(sandbox));
+    files::DeploymentRequest request;
+    request.package_root=package;request.install_root=sandbox/L"install";
+    request.owner="LiuKai-TSF-v1";request.include_machine_com_x64=true;
+    FakeBackend backend;
+    backend.fail_apply=installer::Resource::profile;
+    backend.partial_failure=true;
+    backend.unreadable_after_partial_failure=true;
+    backend.apply_failure=HRESULT_FROM_WIN32(ERROR_INVALID_DATA);
+    durable_cli::journal::Identity identity;
+    installer::DeploymentObserverFactory factory = [&](const files::DeploymentRequest& req,
+            const files::DeploymentPaths& paths,std::unique_ptr<installer::TransactionObserver>* output) -> HRESULT {
+        HRESULT status=durable_cli::Session::create(req,paths,output,
+            [&backend](installer::Resource r,const installer::ResourceState& s,installer::ResourceState* out) {
+                return backend.project_apply_state(r,s,out);
+            });
+        if(status==S_OK) {
+            auto* session=dynamic_cast<durable_cli::Session*>(output->get());
+            if(!session)return E_UNEXPECTED;
+            identity=session->identity();
+        }
+        return status;
+    };
+    const auto result=installer::deploy_and_register(backend,request,nullptr,factory);
+    CHECK(result.operation==HRESULT_FROM_WIN32(ERROR_INVALID_DATA));
+    CHECK(result.cleanup==HRESULT_FROM_WIN32(ERROR_RETRY));
+    CHECK(backend.states[static_cast<size_t>(installer::Resource::profile)].present);
+    CHECK(fs::exists(request.install_root/L"versions"));
+    const fs::path ledger(identity.storage_root);
+    CHECK(fs::exists(ledger/L"transaction.journal")&&fs::exists(ledger/L"transaction.snapshot"));
+    CHECK(!fs::exists(ledger/L"terminal-compensation.journal"));
+    // A new process must not treat the unreadable, possibly mutated resource
+    // as a completed compensation or permit a new install over the history.
+    CHECK(durable_cli::detail::inspect_machine_history(request.install_root,request.owner,
+        [&backend](installer::Resource r,const installer::ResourceState& s,installer::ResourceState* out) {
+            return backend.project_apply_state(r,s,out);
+        })==HRESULT_FROM_WIN32(ERROR_INVALID_STATE));
+    return true;
+}
 
 static bool make_committed(const fs::path& package, const fs::path& sandbox,
                           durable_cli::journal::Identity* identity,
@@ -338,6 +390,38 @@ static bool test_machine_recovery_and_compensation(const fs::path& package,const
     return true;
 }
 
+static bool test_shared_failed_deployment_compensation(const fs::path& package,const fs::path& sandbox) {
+    CHECK(fs::create_directory(sandbox));
+    for (const bool partial : {false,true}) {
+        const fs::path test_root=sandbox/(partial?L"partial":L"unchanged");
+        CHECK(fs::create_directory(test_root));
+        FakeBackend backend;
+        backend.shared_projection=true;
+        backend.fail_apply=installer::Resource::profile;
+        backend.partial_failure=partial;
+        backend.apply_failure=HRESULT_FROM_WIN32(ERROR_INVALID_DATA);
+        const auto prestate=backend.states;
+        const auto projection=[&backend](installer::Resource resource,const installer::ResourceState& state,
+                installer::ResourceState* out) {return backend.project_apply_state(resource,state,out);};
+        files::DeploymentRequest request;
+        request.package_root=package;request.install_root=test_root/L"install";
+        request.owner="LiuKai-TSF-v1";request.include_machine_com_x64=true;
+        durable_cli::journal::Identity identity;
+        const installer::DeploymentObserverFactory factory=[&](const files::DeploymentRequest& input,
+                const files::DeploymentPaths& paths,std::unique_ptr<installer::TransactionObserver>* out) {
+            const HRESULT status=durable_cli::Session::create(input,paths,out,projection);
+            if(status==S_OK)identity=dynamic_cast<durable_cli::Session*>(out->get())->identity();
+            return status;
+        };
+        const auto result=installer::deploy_and_register(backend,request,nullptr,factory);
+        CHECK(result.operation==HRESULT_FROM_WIN32(ERROR_INVALID_DATA));
+        CHECK(result.cleanup==S_OK && backend.states==prestate);
+        CHECK(installer::durable_compensation_marker::inspect(identity,request.install_root,projection)==S_OK);
+        CHECK(fs::is_regular_file(fs::path(identity.storage_root)/L"terminal-compensation.journal"));
+    }
+    return true;
+}
+
 static bool test_event_sequence_guards() {
     using Event = durable_cli::journal::Event;
     durable_cli::journal::Document document;
@@ -397,7 +481,9 @@ int wmain(int argc, wchar_t** argv) {
     if (!test_event_sequence_guards() || !test_singleton_commit_classification(package, sandbox) ||
         !test_owned_and_absent_com32(package, sandbox) ||
         !test_machine_recovery_and_compensation(package,sandbox/L"machine-scope") ||
-        !test_machine_file_publication_boundary(package,sandbox/L"machine-prefile")) return 1;
+        !test_shared_failed_deployment_compensation(package,sandbox/L"shared-compensation") ||
+        !test_machine_file_publication_boundary(package,sandbox/L"machine-prefile") ||
+        !test_ambiguous_profile_is_not_cleaned(package,sandbox/L"ambiguous-profile")) return 1;
     std::cout << "committed x64 singleton recovery classification assertions passed\n";
     return 0;
 }
