@@ -1,0 +1,6 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Patch AllowRemoval="yes" DisplayName="LiuKai R64 uninstall migration" Description="LiuKai R64 uninstall migration" Manufacturer="LiuKai" Classification="Update">
+    <Media Id="1" Cabinet="patch.cab"><PatchBaseline Id="R64" BaselineFile="r64-original.msi" UpdateFile="r64-patched.msi" /></Media>
+    <PatchFamily Id="R64Uninstall" Version="1.0.65" />
+  </Patch>
+</Wix>

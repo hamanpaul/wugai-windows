@@ -303,7 +303,7 @@ class Service final: public ITfTextInputProcessorEx, public ITfKeyEventSink, pub
   boshiamy::candidate_ui::Snapshot snapshot;snapshot.description=L"嘸．改";
   snapshot.guid={0x22fa1048,0xf1d3,0x465c,{0x92,0xc8,0xee,0xb1,0xd5,0x86,0x86,0xe1}};
   snapshot.document=document;snapshot.updated_flags=0x3e;
-  if(out.layout_candidates)for(const auto& value:*out.layout_candidates)snapshot.strings.push_back(to_wide(value.text));
+  if(out.layout_candidates)for(const auto& value:*out.layout_candidates)snapshot.strings.push_back(to_wide(boshiamy::candidate_display_text(value)));
   for(auto start:out.candidate_page_indices)snapshot.page_starts.push_back(static_cast<UINT>(start));
   // An active empty list still describes page zero. Keep the same host object
   // and its Show/Begin policy while the user edits an unmatched composition.
@@ -716,6 +716,7 @@ public:
   if(control)return false;
   if(modes.english())return modes.fullwidth()&&boshiamy::printable_ascii((int)w,shift,false).has_value();
   if(shift_lower_symbols&&shift&&lower_symbol_key(w))return true;
+  if(engine&&!shift&&(w==VK_UP||w==VK_DOWN)){const auto state=engine->snapshot();return state.query==boshiamy::QueryStage::Homophones&&!state.candidates.empty();}
   if(engine){auto state=engine->snapshot();if(w==VK_RETURN&&(state.query_preview||state.query==boshiamy::QueryStage::PhoneticInput))return true;if(w==VK_LEFT&&!shift&&state.query_preview)return true;if((w==VK_PRIOR||w==VK_NEXT)&&composing&&state.query==boshiamy::QueryStage::None)return true;}
   return should_handle_key(w,shift,control,alt,composing,hasCandidates);
  }
@@ -805,6 +806,8 @@ HRESULT key_down_impl(ITfContext* ctx,WPARAM w,bool shift,bool control,bool alt,
   else if(w==VK_ESCAPE)out=trial.key(boshiamy::Key::Escape);
   else if(w==VK_PRIOR)out=trial.key(boshiamy::Key::PageUp);
   else if(w==VK_NEXT)out=trial.key(boshiamy::Key::PageDown);
+  else if(w==VK_UP)out=trial.key(boshiamy::Key::Up);
+  else if(w==VK_DOWN)out=trial.key(boshiamy::Key::Down);
   else if(w>=0x30&&w<=0x39)out=trial.key((char)w,shift);
   else if(mapped)out=trial.key(root,shift,shift_lower_symbols);
   else if(extra)out=trial.key(aux);
@@ -818,7 +821,7 @@ HRESULT key_down_impl(ITfContext* ctx,WPARAM w,bool shift,bool control,bool alt,
   if(FAILED(hr)||FAILED(session))return S_OK;
   if(!mgr){*eaten=TRUE;return S_OK;}
   publish_candidate(ctx);sync_language_bar();
-  forget_query_release(w);if((w==VK_RETURN&&out.query_preview)||((w==VK_PRIOR||w==VK_NEXT)&&!out.composition.empty()))remember_query_release(ctx,w);
+  forget_query_release(w);if((w==VK_RETURN&&out.query_preview)||((w==VK_PRIOR||w==VK_NEXT||w==VK_UP||w==VK_DOWN)&&!out.composition.empty()))remember_query_release(ctx,w);
   *eaten=TRUE;
   return S_OK;
 }

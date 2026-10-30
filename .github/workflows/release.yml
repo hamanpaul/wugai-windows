@@ -46,6 +46,15 @@ jobs:
           finally { Pop-Location }
           "WIX_EXE=$wix" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           "WIX_BAL=$(Join-Path $tools '.wix\extensions\WixToolset.Bal.wixext\6.0.2\wixext6\WixToolset.BootstrapperApplications.wixext.dll')" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+      - name: Acquire pinned R64 MSI
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $dir = Join-Path $pwd 'build/r64-baseline'
+          New-Item -ItemType Directory -Path $dir -Force | Out-Null
+          gh release download r64 --repo hamanpaul/wugai-windows --pattern LiuKai.msi --dir $dir
+          if ($LASTEXITCODE -ne 0) { throw 'Could not download official R64 MSI.' }
       - name: Run release preflight and WiX TLS regression
         shell: powershell
         run: |
@@ -56,6 +65,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Release tests failed.' }
           & .\native\tests\wix-tls-detach-tests.ps1 -ToolchainBin $toolchain -WorkDir "$pwd\build\wix-tls-test"
           if ($LASTEXITCODE -ne 0) { throw 'WiX TLS regression failed.' }
+          & .\native\tests\wix-retired-files-tests.ps1 -ToolchainBin $toolchain -WorkDir "$pwd\build\wix-retired-files-test"
+          if ($LASTEXITCODE -ne 0) { throw 'Retired file regression failed.' }
           foreach ($name in @('wix-legacy-recovery-policy-tests.ps1','wix-legacy-recovery-transaction-tests.ps1','wix-legacy-recovery-backup-tests.ps1','wix-legacy-recovery-registry-tests.ps1','wix-legacy-recovery-adapter-tests.ps1','wix-legacy-owner-marker-tests.ps1')) {
             & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path 'native\tests' $name)
             if ($LASTEXITCODE -ne 0) { throw "Legacy safety test failed: $name" }
@@ -74,7 +85,7 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $toolchain = Join-Path '${{ steps.msys.outputs.msys2-location }}' 'mingw64\bin'
           $env:PATH = $toolchain + ';' + $env:PATH
-          & .\native\wix\build-installer.ps1 -WixExe $env:WIX_EXE -BalExtension $env:WIX_BAL -SourceBundle "$pwd\dist\source\bundle" -OutputDir "$pwd\dist\wix" -ToolchainBin $toolchain -MsiVersion $env:MSI_VERSION -PublishBuild
+          & .\native\wix\build-installer.ps1 -WixExe $env:WIX_EXE -BalExtension $env:WIX_BAL -SourceBundle "$pwd\dist\source\bundle" -OutputDir "$pwd\dist\wix" -R64Msi "$pwd\build\r64-baseline\LiuKai.msi" -ToolchainBin $toolchain -MsiVersion $env:MSI_VERSION -PublishBuild
           $files = @('LiuKai-win-setup.exe','LiuKai.msi')
           $sums = foreach ($name in $files) { "$((Get-FileHash -LiteralPath (Join-Path 'dist\wix' $name) -Algorithm SHA256).Hash.ToLowerInvariant())  $name" }
           [IO.File]::WriteAllLines("$pwd\dist\wix\SHA256SUMS.txt", [string[]]$sums, [Text.UTF8Encoding]::new($false))
@@ -87,6 +98,13 @@ jobs:
           $env:PATH = $toolchain + ';' + $env:PATH
           & .\native\tests\wix-early-collector-tests.ps1 -ToolchainBin $toolchain -WorkDir "$pwd\build\early-diagnostic-test" -Msi "$pwd\dist\wix\LiuKai.msi" -ExpectedScript "$pwd\native\collect-install-diagnostics.ps1"
           if ($LASTEXITCODE -ne 0) { throw 'Early diagnostics test failed.' }
+      - name: Test locked-file MSI rollback
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $toolchain = Join-Path '${{ steps.msys.outputs.msys2-location }}' 'mingw64\bin'
+          & .\native\tests\wix-retired-msi-tests.ps1 -ToolchainBin $toolchain -WixExe $env:WIX_EXE -WorkDir "$pwd\build\wix-retired-msi-test"
+          if ($LASTEXITCODE -ne 0) { throw 'Locked-file MSI rollback test failed.' }
       - name: Preserve verified release files
         uses: actions/upload-artifact@v4
         with:

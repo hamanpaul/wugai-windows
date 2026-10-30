@@ -2,6 +2,7 @@ param(
     [Parameter(Mandatory=$true)][string]$WixExe,
     [Parameter(Mandatory=$true)][string]$Bundle,
     [Parameter(Mandatory=$true)][string]$Msi,
+    [string]$Patch,
     [Parameter(Mandatory=$true)][string]$Icon,
     [Parameter(Mandatory=$true)][string]$Logo,
     [Parameter(Mandatory=$true)][string]$Notice,
@@ -31,6 +32,19 @@ if(-not $theme.Contains('ImageFile="logo.png"')){throw 'Installer theme does not
 $expected=(Get-FileHash -LiteralPath $msiPath -Algorithm SHA256).Hash
 $matches=@(Get-ChildItem -LiteralPath $extract -File -Recurse | Where-Object { (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash -ceq $expected })
 if ($matches.Count -ne 1) { throw "Embedded MSI hash match count was $($matches.Count), expected one." }
+if($Patch){
+    $patchHash=(Get-FileHash -LiteralPath (Resolve-Path -LiteralPath $Patch).Path -Algorithm SHA256).Hash
+    $patchMatches=@(Get-ChildItem -LiteralPath $extract -File -Recurse | Where-Object { (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash -ceq $patchHash })
+    if($patchMatches.Count -ne 1){throw "Embedded R64 migration patch hash match count was $($patchMatches.Count), expected one."}
+    [xml]$manifest=Get-Content -LiteralPath (Join-Path ($extract+'-ba') 'manifest.xml') -Raw
+    $chain=@($manifest.SelectNodes("//*[local-name()='Chain']/*"))
+    if($chain.Count -ne 2 -or $chain[0].LocalName -cne 'MspPackage' -or $chain[0].GetAttribute('Id') -cne 'R64Migration' -or $chain[1].LocalName -cne 'MsiPackage' -or $chain[1].GetAttribute('Id') -cne 'LiuKaiMsi'){throw 'Unexpected Burn migration chain order.'}
+    $rm=$chain[0].SelectSingleNode("*[local-name()='MsiProperty' and @Id='MSIRESTARTMANAGERCONTROL']")
+    $gate=$chain[1].SelectSingleNode("*[local-name()='MsiProperty' and @Id='LIUKAIBUNDLEUPGRADE']")
+    if(-not $rm -or $rm.GetAttribute('Value') -cne 'DisableShutdown' -or -not $gate -or $gate.GetAttribute('Value') -cne '1'){throw 'Missing Burn migration safety properties.'}
+    $targets=@($manifest.SelectNodes("//*[local-name()='PatchTargetCode']"))
+    if($targets.Count -ne 1 -or $targets[0].GetAttribute('TargetCode') -cne '{7ED30030-AC1F-4E13-87F8-5648D0B84C38}'){throw 'Unexpected R64 migration patch target.'}
+}
 Add-Type -AssemblyName System.Drawing
 $source=New-Object System.Drawing.Icon($iconPath,32,32)
 $embedded=[Drawing.Icon]::ExtractAssociatedIcon($bundlePath)

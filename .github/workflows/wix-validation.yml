@@ -38,6 +38,15 @@ jobs:
           finally { Pop-Location }
           "WIX_EXE=$wix" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           "WIX_BAL=$(Join-Path $tools '.wix\extensions\WixToolset.Bal.wixext\6.0.2\wixext6\WixToolset.BootstrapperApplications.wixext.dll')" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+      - name: Acquire pinned R64 MSI
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $dir = Join-Path $pwd 'build/r64-baseline'
+          New-Item -ItemType Directory -Path $dir -Force | Out-Null
+          gh release download r64 --repo hamanpaul/wugai-windows --pattern LiuKai.msi --dir $dir
+          if ($LASTEXITCODE -ne 0) { throw 'Could not download official R64 MSI.' }
       - name: Run legacy safety unit tests
         shell: powershell
         run: |
@@ -123,7 +132,7 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $toolchain = Join-Path '${{ steps.msys.outputs.msys2-location }}' 'mingw64\bin'
           $env:PATH = $toolchain + ';' + $env:PATH
-          & .\native\wix\build-installer.ps1 -WixExe $env:WIX_EXE -BalExtension $env:WIX_BAL -SourceBundle "$pwd\dist\source-fixture\bundle" -OutputDir "$pwd\dist\wix-test-candidate" -ToolchainBin $toolchain
+          & .\native\wix\build-installer.ps1 -WixExe $env:WIX_EXE -BalExtension $env:WIX_BAL -SourceBundle "$pwd\dist\source-fixture\bundle" -OutputDir "$pwd\dist\wix-test-candidate" -R64Msi "$pwd\build\r64-baseline\LiuKai.msi" -ToolchainBin $toolchain
       - name: Test early failure diagnostics and staging cleanup
         shell: powershell
         run: |

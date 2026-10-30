@@ -296,14 +296,14 @@ private:
         rows.reserve(count);
         int text_width = 0;
         for (std::size_t i = 0; i < count; ++i) {
-            const std::wstring candidate = utf8_to_wide(outcome.candidates[i].text);
+            const std::wstring candidate = utf8_to_wide(candidate_display_text(outcome.candidates[i]));
             rows.push_back(std::to_wstring(i) + L" " + candidate);
             SetWindowTextW(candidate_labels_[i], rows.back().c_str());
         }
         const auto& width_candidates = outcome.layout_candidates
             ? *outcome.layout_candidates : outcome.candidates;
         for (const Candidate& entry : width_candidates)
-            text_width = std::max(text_width, measure_text_width(utf8_to_wide(entry.text)));
+            text_width = std::max(text_width, measure_text_width(utf8_to_wide(candidate_display_text(entry))));
         for (std::size_t i = count; i < candidate_labels_.size(); ++i) {
             SetWindowTextW(candidate_labels_[i], L"");
             ShowWindow(candidate_labels_[i], SW_HIDE);
@@ -326,7 +326,7 @@ private:
             candidate_total_height_ = 0;
             const int candidate_text_width = std::max(1, available_width - border * 2 - gutter - scaled(1, scale));
             for (std::size_t i = 0; i < count; ++i) {
-                const std::wstring candidate = utf8_to_wide(outcome.candidates[i].text);
+                const std::wstring candidate = utf8_to_wide(candidate_display_text(outcome.candidates[i]));
                 const int measured = measure_text_width(candidate) > candidate_text_width
                     ? measure_text_height(candidate, candidate_text_width) + scaled(2, scale) : row_height;
                 const int measured_row = std::max(row_height, measured);
@@ -387,6 +387,9 @@ private:
         if (has_scrollbar) candidate_inner_width_ = std::max(1, candidate_inner_width_ - scrollbar_width_for_dpi(dpi));
         MoveWindow(viewport_, border, border, candidate_inner_width_, viewport_height, TRUE);
         layout_candidate_rows();
+        // Selection can change while the labels keep identical text and size;
+        // invalidating only the parent does not repaint their custom highlights.
+        for(std::size_t i=0;i<count;++i)InvalidateRect(candidate_labels_[i], nullptr, TRUE);
         InvalidateRect(hwnd_, nullptr, TRUE);
         if (!was_visible) ShowWindow(hwnd_, SW_SHOWNOACTIVATE);
         if (!IsWindowVisible(hwnd_)) return;
