@@ -1,6 +1,9 @@
 name: WiX development validation (no release)
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - 'fix/fresh-profile-icon-readback'
 permissions:
   contents: read
 jobs:
