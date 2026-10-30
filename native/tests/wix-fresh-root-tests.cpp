@@ -8,8 +8,13 @@ int main(){
     CHECK(m::normalized_root(root.wstring()+L"\\")==root);
     CHECK(m::require_absent_root(root)==S_OK);
     CHECK(fs::create_directory(root));
+    CHECK(m::require_absent_root(root)==S_OK);
+    CHECK(!fs::exists(root));
+    CHECK(fs::create_directory(root));
+    {std::ofstream file(root/L"keep.txt");CHECK(file.good());file<<"preserve";}
     CHECK(m::require_absent_root(root)==HRESULT_FROM_WIN32(ERROR_ALREADY_EXISTS));
-    CHECK(fs::remove(root));
+    CHECK(fs::file_size(root/L"keep.txt")==8);
+    CHECK(fs::remove(root/L"keep.txt"));CHECK(fs::remove(root));
     {std::ofstream file(root);CHECK(file.good());file<<"preserve";}
     CHECK(m::require_absent_root(root)==HRESULT_FROM_WIN32(ERROR_ALREADY_EXISTS));
     CHECK(fs::file_size(root)==8);CHECK(fs::remove(root));

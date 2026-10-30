@@ -1,0 +1,24 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package Name="LiuKai isolated MSI rollback fixture" Manufacturer="LiuKai test" Version="1.0.0" UpgradeCode="3B61560D-E1DD-4867-9BE0-9B1A66ED616A" Scope="perUser">
+    <MediaTemplate EmbedCab="yes" />
+    <Property Id="MSIRESTARTMANAGERCONTROL" Value="DisableShutdown" />
+    <Binary Id="Action" SourceFile="$(var.ActionDll)" />
+    <CustomAction Id="Prepare" BinaryRef="Action" DllEntry="Prepare" Execute="immediate" Return="check" />
+    <CustomAction Id="Undo" BinaryRef="Action" DllEntry="Undo" Execute="rollback" Return="check" />
+    <CustomAction Id="Retire" BinaryRef="Action" DllEntry="Retire" Execute="deferred" Return="check" />
+    <CustomAction Id="ForceFailure" BinaryRef="Action" DllEntry="ForceFailure" Execute="deferred" Return="check" />
+    <CustomAction Id="CommitRetire" BinaryRef="Action" DllEntry="CommitRetire" Execute="commit" Return="check" />
+    <InstallExecuteSequence>
+      <Custom Action="Prepare" After="InstallInitialize" Condition="REMOVE=&quot;ALL&quot;" />
+      <Custom Action="Undo" Before="Retire" Condition="REMOVE=&quot;ALL&quot;" />
+      <Custom Action="Retire" Before="RemoveFiles" Condition="REMOVE=&quot;ALL&quot;" />
+      <Custom Action="ForceFailure" After="Retire" Condition="REMOVE=&quot;ALL&quot; AND FAIL_RETIRE=1" />
+      <Custom Action="CommitRetire" After="ForceFailure" Condition="REMOVE=&quot;ALL&quot;" />
+    </InstallExecuteSequence>
+    <StandardDirectory Id="LocalAppDataFolder">
+      <Directory Id="INSTALLDIR" Name="LiuKai-retired-fixture">
+        <Component Id="File"><File Source="$(var.FixtureDll)" Name="fixture.dll" /></Component>
+      </Directory>
+    </StandardDirectory>
+  </Package>
+</Wix>

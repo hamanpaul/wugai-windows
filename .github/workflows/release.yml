@@ -56,6 +56,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Release tests failed.' }
           & .\native\tests\wix-tls-detach-tests.ps1 -ToolchainBin $toolchain -WorkDir "$pwd\build\wix-tls-test"
           if ($LASTEXITCODE -ne 0) { throw 'WiX TLS regression failed.' }
+          & .\native\tests\wix-retired-files-tests.ps1 -ToolchainBin $toolchain -WorkDir "$pwd\build\wix-retired-files-test"
+          if ($LASTEXITCODE -ne 0) { throw 'Retired file regression failed.' }
           foreach ($name in @('wix-legacy-recovery-policy-tests.ps1','wix-legacy-recovery-transaction-tests.ps1','wix-legacy-recovery-backup-tests.ps1','wix-legacy-recovery-registry-tests.ps1','wix-legacy-recovery-adapter-tests.ps1','wix-legacy-owner-marker-tests.ps1')) {
             & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path 'native\tests' $name)
             if ($LASTEXITCODE -ne 0) { throw "Legacy safety test failed: $name" }
@@ -87,6 +89,13 @@ jobs:
           $env:PATH = $toolchain + ';' + $env:PATH
           & .\native\tests\wix-early-collector-tests.ps1 -ToolchainBin $toolchain -WorkDir "$pwd\build\early-diagnostic-test" -Msi "$pwd\dist\wix\LiuKai.msi" -ExpectedScript "$pwd\native\collect-install-diagnostics.ps1"
           if ($LASTEXITCODE -ne 0) { throw 'Early diagnostics test failed.' }
+      - name: Test locked-file MSI rollback
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $toolchain = Join-Path '${{ steps.msys.outputs.msys2-location }}' 'mingw64\bin'
+          & .\native\tests\wix-retired-msi-tests.ps1 -ToolchainBin $toolchain -WixExe $env:WIX_EXE -WorkDir "$pwd\build\wix-retired-msi-test"
+          if ($LASTEXITCODE -ne 0) { throw 'Locked-file MSI rollback test failed.' }
       - name: Preserve verified release files
         uses: actions/upload-artifact@v4
         with:

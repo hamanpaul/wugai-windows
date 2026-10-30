@@ -2,6 +2,8 @@ param([Parameter(Mandatory=$true)][string]$Msi,[switch]$Installable)
 $ErrorActionPreference='Stop'
 $path=(Resolve-Path -LiteralPath $Msi).Path
 $db=(New-Object -ComObject WindowsInstaller.Installer).OpenDatabase($path,0)
+$view=$db.OpenView("SELECT ``Value`` FROM ``Property`` WHERE ``Property`` = 'MSIRESTARTMANAGERCONTROL'");$view.Execute();$rm=$view.Fetch()
+if(-not $rm -or $rm.StringData(1) -cne 'DisableShutdown'){throw 'Installer must not automatically shut down applications.'}
 $view=$db.OpenView('SELECT `FileName` FROM `File`');$view.Execute();$actual=@()
 while($row=$view.Fetch()){$parts=$row.StringData(1).Split('|');$actual+= $parts[$parts.Length-1]}
 $expected=@('LiuKaiInstaller.exe','LiuKaiRegister.exe','branding.dll','package-manifest.json','BoshiamyTsf.dll','LiuKaiLookup.exe','LiuKaiSettings.exe','dictionary.tsv','readings.tsv','recommended-codes.tsv','recommended-codes-source.json','phonetic-candidates.tsv','phonetic-candidates-source.json','THIRD_PARTY_NOTICES.md','recover-legacy-profile.ps1','legacy-prepared-root.ps1','legacy-recovery-policy.ps1','legacy-recovery-observe.ps1','legacy-recovery-transaction.ps1','legacy-recovery-adapter.ps1','legacy-recovery-backup.ps1','legacy-recovery-registry.ps1','legacy-owner-marker.ps1','legacy-history-probe.exe','collect-install-diagnostics.ps1')
@@ -9,11 +11,11 @@ if($actual.Count -ne $expected.Count -or @($actual|Select-Object -Unique).Count 
 foreach($name in $expected){if($name -cnotin $actual){throw "Expected MSI payload file missing: $name"}}
 $view=$db.OpenView('SELECT `Condition` FROM `LaunchCondition`');$view.Execute();$conditions=@()
 while($row=$view.Fetch()){$conditions += $row.StringData(1)}
-if($Installable){if($conditions.Count -ne 2 -or 'VersionNT64' -cnotin $conditions -or 'NOT WIX_DOWNGRADE_DETECTED' -cnotin $conditions){throw 'Installable test package must require 64-bit Windows.'}}
+if($Installable){if($conditions.Count -ne 3 -or 'VersionNT64' -cnotin $conditions -or 'NOT WIX_DOWNGRADE_DETECTED' -cnotin $conditions -or 'NOT RollbackDisabled' -cnotin $conditions){throw 'Installable test package must require 64-bit Windows and rollback.'}}
 elseif('0' -cnotin $conditions){throw 'Development package must be blocked from installation until TSF and rollback are complete.'}
 $view=$db.OpenView('SELECT * FROM `CustomAction`');$view.Execute();$actions=@{}
 while($row=$view.Fetch()){$actions[$row.StringData(1)]=@($row.IntegerData(2),$row.StringData(3),$row.StringData(4))}
-foreach($case in @(@('CollectInstallFailure',17729,'CollectFailure'),@('CollectRemovalFailure',17729,'CollectFailure'),@('CaptureUserContext',1),@('PrepareFreshRegistration',1),@('ValidateUserContext',17409),@('RollbackFresh',17665),@('RecoverLegacyOrphan',17409),@('RegisterFresh',17409),@('PrepareRemoval',1),@('UndoRemoval',17665),@('RemoveRegistration',17409))){
+foreach($case in @(@('CollectInstallFailure',17729,'CollectFailure'),@('CollectRemovalFailure',17729,'CollectFailure'),@('CaptureUserContext',1),@('PrepareFreshRegistration',1),@('ValidateUserContext',17409),@('RollbackFresh',17665),@('RecoverLegacyOrphan',17409),@('RegisterFresh',17409),@('PrepareRemoval',1),@('UndoRemoval',17665),@('RemoveRegistration',17409),@('UndoRetireFiles',17665),@('RetireFiles',17409),@('CommitRetireFiles',17921))){
   $name=$case[0]
   if(-not $actions.ContainsKey($name) -or $actions[$name][0] -ne $case[1] -or $actions[$name][1] -cne 'UserContext' -or $actions[$name][2] -cne $(if($case.Count -eq 3){$case[2]}else{$name})){throw "Invalid user context action: $name"}
 }
@@ -23,7 +25,8 @@ if(-not ($sequence['InstallInitialize'].order -lt $sequence['CaptureUserContext'
 if(-not ($sequence['PrepareFreshRegistration'].order -lt $sequence['CreateFolders'].order -and $sequence['PrepareFreshRegistration'].order -lt $sequence['InstallFiles'].order -and $sequence['PrepareFreshRegistration'].order -lt $sequence['WriteRegistryValues'].order)){throw 'Fresh-install preflight must precede MSI directory, file and registry writes.'}
 foreach($name in @('CaptureUserContext','PrepareFreshRegistration','ValidateUserContext','CollectInstallFailure','RollbackFresh','RecoverLegacyOrphan','RegisterFresh')){if($sequence[$name].condition -cne 'NOT Installed'){throw "Invalid registration action condition: $name"}}
 if(-not ($sequence['InstallInitialize'].order -lt $sequence['PrepareRemoval'].order -and $sequence['PrepareRemoval'].order -lt $sequence['CollectRemovalFailure'].order -and $sequence['CollectRemovalFailure'].order -lt $sequence['UndoRemoval'].order -and $sequence['UndoRemoval'].order -lt $sequence['RemoveRegistration'].order -and $sequence['RemoveRegistration'].order -lt $sequence['RemoveRegistryValues'].order -and $sequence['RemoveRegistration'].order -lt $sequence['RemoveFiles'].order)){throw 'Invalid removal action order.'}
-foreach($name in @('PrepareRemoval','CollectRemovalFailure','UndoRemoval','RemoveRegistration')){if($sequence[$name].condition -cne 'REMOVE="ALL"'){throw "Invalid removal action condition: $name"}}
+if(-not ($sequence['RemoveRegistration'].order -lt $sequence['UndoRetireFiles'].order -and $sequence['UndoRetireFiles'].order -lt $sequence['RetireFiles'].order -and $sequence['RetireFiles'].order -lt $sequence['CommitRetireFiles'].order -and $sequence['CommitRetireFiles'].order -lt $sequence['RemoveFiles'].order)){throw 'Invalid retired file action order.'}
+foreach($name in @('PrepareRemoval','CollectRemovalFailure','UndoRemoval','RemoveRegistration','UndoRetireFiles','RetireFiles','CommitRetireFiles')){if($sequence[$name].condition -cne 'REMOVE="ALL"'){throw "Invalid removal action condition: $name"}}
 $view=$db.OpenView('SELECT `Root`, `Key`, `Name`, `Value`, `Component_` FROM `Registry`');$view.Execute();$identity=@{}
 while($row=$view.Fetch()){
   if($row.StringData(5) -ceq 'InstallIdentity'){

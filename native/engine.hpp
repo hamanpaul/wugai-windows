@@ -22,9 +22,15 @@
 
 namespace boshiamy {
 enum class HintKind { Shortest, Recommended, All };
-enum class Key { Space, Backspace, Escape, PageUp, PageDown, Enter };
+enum class Key { Space, Backspace, Escape, PageUp, PageDown, Enter, Up, Down };
 enum class QueryStage { None, HomophoneSeed, Homophones, PhoneticInput, PhoneticCandidates };
-struct Candidate { std::string text; };
+struct Candidate { std::string text; std::string reverse_code; };
+inline std::string candidate_display_text(const Candidate& candidate) {
+    if(candidate.reverse_code.empty())return candidate.text;
+    std::string code=candidate.reverse_code;
+    for(char& c:code)c=static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+    return candidate.text+" "+code;
+}
 struct Outcome {
     std::string commit;
     std::string composition;
@@ -104,6 +110,7 @@ public:
     void set_speed_hint_only(bool enabled) { speed_hint_only_ = enabled; }
     void set_reverse_mode(ReverseMode mode) {
         reverse_mode_=mode;
+        if(query_==QueryStage::Homophones){annotate_homophones();refresh();}
         if(mode==ReverseMode::Associated&&!candidate_page_indices_.empty()){
             candidate_page_indices_.clear();page_=0;refresh();
         }
@@ -116,7 +123,7 @@ public:
         outcome_.commit.clear();outcome_.hint.clear();
         close_related_stage(true);
     }
-    void set_recommendations(RecommendedCodes data) { recommendations_ = std::move(data); dismiss_hint(); }
+    void set_recommendations(RecommendedCodes data) { recommendations_ = std::move(data); dismiss_hint(); if(query_==QueryStage::Homophones){annotate_homophones();refresh();} }
     void dismiss_hint() { outcome_.hint.clear(); outcome_.commit.clear(); }
     void set_readings(Readings readings) {
         readings_=std::move(readings);composition_.clear();clear_query();close_related_state();page_=0;
@@ -162,6 +169,12 @@ public:
         }
         switch (key) {
         case Key::Enter:
+            if(query_==QueryStage::Homophones){
+                const auto all=visible_candidates();const auto starts=page_starts(all);
+                if(!starts.empty()&&candidate_selection_<all.size()){
+                    select(candidate_selection_-starts[page_]);return outcome_;
+                }
+            }
             // Enter is an English-text commit while input is active. Keep the
             // original keys because query composition may be a Zhuyin display.
             if(!raw_input_.empty()){
@@ -211,6 +224,16 @@ public:
             if (all.empty()) page_ = 0;
             else page_ = (page_ + 1) % count;
             refresh();
+            break;
+        }
+        case Key::Up:
+        case Key::Down: {
+            if(query_!=QueryStage::Homophones)break;
+            const auto all=visible_candidates();
+            if(all.empty())break;
+            const auto next=key==Key::Down?(candidate_selection_+1)%all.size():
+                (candidate_selection_+all.size()-1)%all.size();
+            set_candidate_selection_global(next);
             break;
         }
         }
@@ -481,7 +504,29 @@ private:
             : std::optional<std::vector<std::string>>{};
         if (indexed) prepare_indexed_homophone_query(*indexed);
         else prepare_query(readings_.primary_matches(seed),seed);
+        annotate_homophones();
         query_=QueryStage::Homophones;page_=0;refresh();
+    }
+    void annotate_homophones(){
+        std::map<std::string,std::vector<std::string>> codes;
+        for(const auto& candidate:homophones_)codes.emplace(candidate.text,std::vector<std::string>{});
+        for(const auto& row:active_dict())for(const auto& candidate:row.second){
+            auto found=codes.find(candidate.text);
+            if(found!=codes.end())found->second.push_back(row.first);
+        }
+        for(auto& candidate:homophones_){
+            auto& values=codes[candidate.text];
+            std::sort(values.begin(),values.end(),[](const std::string& a,const std::string& b){return std::make_pair(a.size(),a)<std::make_pair(b.size(),b);});
+            values.erase(std::unique(values.begin(),values.end()),values.end());
+            candidate.reverse_code.clear();
+            if(values.empty())continue;
+            if(reverse_mode_==ReverseMode::All){
+                for(const auto& code:values){if(!candidate.reverse_code.empty())candidate.reverse_code+=" / ";candidate.reverse_code+=code;}
+            }else if(reverse_mode_==ReverseMode::Recommended){
+                const auto recommended=recommendations_.get(candidate.text,mode_);
+                candidate.reverse_code=std::find(values.begin(),values.end(),recommended)!=values.end()?recommended:values.front();
+            }else candidate.reverse_code=values.front();
+        }
     }
     void open_phonetic(bool explicit_confirmation=false){
         const auto reading=zhuyin::reading(composition_);

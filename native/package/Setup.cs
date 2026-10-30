@@ -394,6 +394,7 @@ internal static class Setup {
                 using (var self = Process.GetCurrentProcess()) { launcherPid = self.Id; }
                 var handoff = new ProcessStartInfo(worker, BuildSetupArguments(options, sid, workerJob, launcherPid));
                 handoff.UseShellExecute = false;
+                handoff.WorkingDirectory = Environment.GetFolderPath(Environment.SpecialFolder.System);
                 handoff.CreateNoWindow = true;
                 handoff.WindowStyle = ProcessWindowStyle.Hidden;
                 using (var child = Process.Start(handoff)) {
@@ -412,6 +413,7 @@ internal static class Setup {
                     BuildSetupArguments(options, sid, elevatedJob));
                 elevation.Verb = "runas";
                 elevation.UseShellExecute = true;
+                elevation.WorkingDirectory = Environment.GetFolderPath(Environment.SpecialFolder.System);
                 elevation.WindowStyle = ProcessWindowStyle.Hidden;
                 using (var child = Process.Start(elevation)) {
                     child.WaitForExit();
@@ -456,6 +458,7 @@ internal static class Setup {
             var start = new ProcessStartInfo(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "WindowsPowerShell", "v1.0", "powershell.exe"));
             start.Arguments = BuildScriptArguments(options, script, root, sid, executable);
             start.UseShellExecute = false;
+            start.WorkingDirectory = Environment.GetFolderPath(Environment.SpecialFolder.System);
             start.CreateNoWindow = true;
             AddWindowsPowerShellModules(start);
             start.RedirectStandardOutput = true;

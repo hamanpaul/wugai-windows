@@ -9,11 +9,17 @@ inline std::filesystem::path normalized_root(const std::wstring& value) {
     return result;
 }
 // A fresh MSI must not adopt an existing directory, file or reparse point.
+// RemoveDirectoryW succeeds only if a normal directory is empty; never recurse.
 // This is a preflight check, not a lock against a concurrent external writer.
 inline HRESULT require_absent_root(const std::filesystem::path& root) {
     if(!root.is_absolute()||root.empty()||root!=root.lexically_normal()||root.filename().empty())return E_INVALIDARG;
     const DWORD attrs=GetFileAttributesW(root.c_str());
-    if(attrs!=INVALID_FILE_ATTRIBUTES)return HRESULT_FROM_WIN32(ERROR_ALREADY_EXISTS);
+    if(attrs!=INVALID_FILE_ATTRIBUTES){
+        if((attrs&FILE_ATTRIBUTE_DIRECTORY) && !(attrs&FILE_ATTRIBUTE_REPARSE_POINT)) {
+            if(RemoveDirectoryW(root.c_str())) return S_OK;
+        }
+        return HRESULT_FROM_WIN32(ERROR_ALREADY_EXISTS);
+    }
     const DWORD error=GetLastError();
     return error==ERROR_FILE_NOT_FOUND||error==ERROR_PATH_NOT_FOUND?S_OK:HRESULT_FROM_WIN32(error);
 }

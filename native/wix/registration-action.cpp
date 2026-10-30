@@ -7,6 +7,7 @@
 #include <wix-binding.hpp>
 #include "fresh-registration.hpp"
 #include "fresh-root.hpp"
+#include "retired-files.hpp"
 #include "modern-categories.hpp"
 #include "failure-collector.hpp"
 #include "early-failure-collector.hpp"
@@ -159,10 +160,15 @@ extern "C" __declspec(dllexport) UINT __stdcall PrepareRemoval(MSIHANDLE install
         if(!ok||owner!=L"LiuKai-TSF-v1"||recordedSid!=sid||recordedToken!=token||
            recordedVersion!=expectedVersion||recordedHash!=expectedHash)return failed(install,L"remove-identity",HRESULT_FROM_WIN32(ERROR_REVISION_MISMATCH));
         std::string undo,restore;if(!durable_cli::detail::make_token(&undo)||!durable_cli::detail::make_token(&restore)||undo==restore)return failed(install,L"remove-token",E_FAIL);
+        const UINT rebootMode=MsiSetMode(install,MSIRUNMODE_REBOOTATEND,TRUE);
+        if(rebootMode!=ERROR_SUCCESS)return failed(install,L"remove-reboot-mode",HRESULT_FROM_WIN32(rebootMode));
         const std::wstring data=sid+L"|"+root+L"|"+recordedVersion+L"|"+token+L"|"+std::wstring(undo.begin(),undo.end());
         const std::wstring restoreData=data+L"|"+std::wstring(restore.begin(),restore.end());
         return prepare_failure_collection(install,L"CollectRemovalFailure",sid,root) &&
             MsiSetPropertyW(install,L"RemoveRegistration",data.c_str())==ERROR_SUCCESS &&
+            MsiSetPropertyW(install,L"RetireFiles",data.c_str())==ERROR_SUCCESS &&
+            MsiSetPropertyW(install,L"UndoRetireFiles",data.c_str())==ERROR_SUCCESS &&
+            MsiSetPropertyW(install,L"CommitRetireFiles",data.c_str())==ERROR_SUCCESS &&
             MsiSetPropertyW(install,L"UndoRemoval",restoreData.c_str())==ERROR_SUCCESS?ERROR_SUCCESS:ERROR_INSTALL_FAILURE;
     }catch(...){return failed(install,L"remove-prepare-exception",E_FAIL);}
 }
@@ -327,6 +333,56 @@ static UINT remove_owned_registration(MSIHANDLE install,bool allow_missing) {
 }
 extern "C" __declspec(dllexport) UINT __stdcall RollbackFresh(MSIHANDLE install) {return remove_owned_registration(install,true);}
 extern "C" __declspec(dllexport) UINT __stdcall RemoveRegistration(MSIHANDLE install) {return remove_owned_registration(install,false);}
+
+struct RetireContext {
+    std::filesystem::path tsf, branding, retiredTsf, retiredBranding;
+};
+static bool retire_context(MSIHANDLE install, RetireContext& out) {
+    std::wstring data,sid;
+    if(!property(install,L"CustomActionData",data)||!elevated_process_user(sid))return false;
+    std::vector<std::wstring> parts;size_t start=0;
+    for(size_t i=0;i<=data.size();++i)if(i==data.size()||data[i]==L'|'){parts.push_back(data.substr(start,i-start));start=i+1;}
+    if(parts.size()!=5||parts[0]!=sid)return false;
+    const std::wstring version(kWixRuntimeVersion,kWixRuntimeVersion+strlen(kWixRuntimeVersion));
+    auto valid=[](const std::wstring& s){return s.size()==32&&std::all_of(s.begin(),s.end(),[](wchar_t c){return (c>=L'0'&&c<=L'9')||(c>=L'a'&&c<=L'f');});};
+    if(parts[2]!=version||!valid(parts[3])||!valid(parts[4])||parts[3]==parts[4])return false;
+    PWSTR programFiles=nullptr;if(SHGetKnownFolderPath(FOLDERID_ProgramFiles,KF_FLAG_DEFAULT,nullptr,&programFiles)!=S_OK)return false;
+    const auto parent=std::filesystem::path(programFiles).lexically_normal();CoTaskMemFree(programFiles);
+    const auto root=(parent/L"LiuKai").lexically_normal();
+    if(!detail::same_path(root.wstring(),msi_registration::normalized_root(parts[1]).wstring()))return false;
+    out.tsf=root/L"versions"/version/L"x64"/L"BoshiamyTsf.dll";
+    out.branding=root/L"shared"/L"branding.dll";
+    const auto stem=L".liukai-retired-"+parts[4];
+    out.retiredTsf=parent/(stem+L"-tsf.dll");out.retiredBranding=parent/(stem+L"-branding.dll");
+    return true;
+}
+extern "C" __declspec(dllexport) UINT __stdcall RetireFiles(MSIHANDLE install) {
+    try {
+        RetireContext c;if(!retire_context(install,c))return failed(install,L"retire-context",E_ACCESSDENIED);
+        HRESULT hr=liukai::retired_files::retire(c.tsf,c.retiredTsf,kWixTsfSha256);
+        if(hr!=S_OK)return failed(install,L"retire-tsf",hr);
+        hr=liukai::retired_files::retire(c.branding,c.retiredBranding,kWixBrandingSha256);
+        if(hr!=S_OK)return failed(install,L"retire-branding",hr);
+        return ERROR_SUCCESS;
+    }catch(...){return failed(install,L"retire-exception",E_FAIL);}
+}
+extern "C" __declspec(dllexport) UINT __stdcall UndoRetireFiles(MSIHANDLE install) {
+    try {
+        RetireContext c;if(!retire_context(install,c))return failed(install,L"retire-undo-context",E_ACCESSDENIED);
+        const HRESULT a=liukai::retired_files::restore(c.branding,c.retiredBranding,kWixBrandingSha256);
+        const HRESULT b=liukai::retired_files::restore(c.tsf,c.retiredTsf,kWixTsfSha256);
+        return a==S_OK&&b==S_OK?ERROR_SUCCESS:failed(install,L"retire-undo",a!=S_OK?a:b);
+    }catch(...){return failed(install,L"retire-undo-exception",E_FAIL);}
+}
+extern "C" __declspec(dllexport) UINT __stdcall CommitRetireFiles(MSIHANDLE install) {
+    try {
+        RetireContext c;if(!retire_context(install,c))return failed(install,L"retire-commit-context",E_ACCESSDENIED);
+        const HRESULT a=liukai::retired_files::schedule_retired(c.retiredTsf,kWixTsfSha256);
+        const HRESULT b=liukai::retired_files::schedule_retired(c.retiredBranding,kWixBrandingSha256);
+        if(a!=S_OK||b!=S_OK)return failed(install,L"retire-commit-cleanup",a!=S_OK?a:b);
+        return ERROR_SUCCESS;
+    }catch(...){return failed(install,L"retire-commit-exception",E_FAIL);}
+}
 
 extern "C" __declspec(dllexport) UINT __stdcall UndoRemoval(MSIHANDLE install) {
     try {

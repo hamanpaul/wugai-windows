@@ -37,6 +37,8 @@ $compiler=Join-Path (Resolve-Path -LiteralPath $ToolchainBin).Path 'g++.exe'
 $contextDll=Join-Path $out 'user-context.dll'
 $manifestHash=(Get-FileHash -LiteralPath (Join-Path $package 'manifest.json') -Algorithm SHA256).Hash.ToLowerInvariant()
 $helperHash=(Get-FileHash -LiteralPath (Join-Path $package 'LiuKaiInstaller.exe') -Algorithm SHA256).Hash.ToLowerInvariant()
+$tsfHash=(Get-FileHash -LiteralPath (Join-Path $runtime 'BoshiamyTsf.dll') -Algorithm SHA256).Hash.ToLowerInvariant()
+$brandingHash=(Get-FileHash -LiteralPath (Join-Path $package 'shared\branding.dll') -Algorithm SHA256).Hash.ToLowerInvariant()
 $diagnosticsHash=(Get-FileHash -LiteralPath (Join-Path $repo 'native\collect-install-diagnostics.ps1') -Algorithm SHA256).Hash.ToLowerInvariant()
 $historyProbe=Join-Path $out 'legacy-history-probe.exe'
 & $compiler -std=c++17 -O2 -static (Join-Path $PSScriptRoot 'legacy-history-probe.cpp') -lole32 -loleaut32 -luuid -ladvapi32 -lbcrypt -lshlwapi -o $historyProbe
@@ -49,7 +51,7 @@ foreach($name in @('recover-legacy-profile.ps1','legacy-prepared-root.ps1','lega
 $extraProof['support/legacy-history-probe.exe']=(Get-FileHash -LiteralPath $historyProbe -Algorithm SHA256).Hash.ToLowerInvariant()
 $extraProof['support/collect-install-diagnostics.ps1']=$diagnosticsHash
 $proofText=(@($extraProof.GetEnumerator()|ForEach-Object {$_.Key+'='+$_.Value}) -join ';')
-$binding="#pragma once`ninline constexpr char kWixRuntimeVersion[] = `"$version`";`ninline constexpr char kWixManifestSha256[] = `"$manifestHash`";`ninline constexpr char kWixHelperSha256[] = `"$helperHash`";`ninline constexpr char kWixDiagnosticsSha256[] = `"$diagnosticsHash`";`ninline constexpr char kWixHistorySha256[] = `"$($extraProof['support/legacy-history-probe.exe'])`";`ninline constexpr char kWixRecoveryProof[] = `"$proofText`";`n"
+$binding="#pragma once`ninline constexpr char kWixRuntimeVersion[] = `"$version`";`ninline constexpr char kWixManifestSha256[] = `"$manifestHash`";`ninline constexpr char kWixHelperSha256[] = `"$helperHash`";`ninline constexpr char kWixTsfSha256[] = `"$tsfHash`";`ninline constexpr char kWixBrandingSha256[] = `"$brandingHash`";`ninline constexpr char kWixDiagnosticsSha256[] = `"$diagnosticsHash`";`ninline constexpr char kWixHistorySha256[] = `"$($extraProof['support/legacy-history-probe.exe'])`";`ninline constexpr char kWixRecoveryProof[] = `"$proofText`";`n"
 [IO.File]::WriteAllText((Join-Path $out 'wix-binding.hpp'),$binding,[Text.Encoding]::ASCII)
 & $compiler -std=c++17 -O2 -static -shared "-I$out" (Join-Path $PSScriptRoot 'user-context.cpp') (Join-Path $PSScriptRoot 'registration-action.cpp') -lmsi -lole32 -loleaut32 -luuid -ladvapi32 -lbcrypt -lshlwapi -lshell32 -lwtsapi32 -o $contextDll
 if($LASTEXITCODE -ne 0){throw 'User context action compilation failed.'}
