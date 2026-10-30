@@ -2,6 +2,7 @@ param(
     [Parameter(Mandatory=$true)][string]$WixExe,
     [Parameter(Mandatory=$true)][string]$BalExtension,
     [Parameter(Mandatory=$true)][string]$SourceBundle,
+    [Parameter(Mandatory=$true)][string]$R64Msi,
     [Parameter(Mandatory=$true)][string]$OutputDir,
     [Parameter(Mandatory=$true)][string]$ToolchainBin,
     [string]$MsiVersion='64.0.0',
@@ -15,6 +16,7 @@ $bal=(Resolve-Path -LiteralPath $BalExtension).Path
 $wixVersion=(& $wix --version | Out-String).Trim()
 if($LASTEXITCODE -ne 0 -or $wixVersion -cnotmatch '^6\.0\.2\+'){throw 'WiX 6.0.2 is required for this prototype.'}
 $source=(Resolve-Path -LiteralPath $SourceBundle).Path
+$legacy=(Resolve-Path -LiteralPath $R64Msi).Path
 $out=[IO.Path]::GetFullPath($OutputDir)
 if(Test-Path -LiteralPath $out){throw 'Output directory already exists.'}
 if(-not (Test-Path -LiteralPath (Split-Path -Parent $out) -PathType Container)){throw 'Output parent must exist.'}
@@ -33,6 +35,10 @@ $version=[string]$manifest.version
 if($version -cnotmatch '^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$' -or $version.Contains('..') -or $version -cne $release.version){throw 'Invalid runtime version.'}
 $runtime=Join-Path $package ('versions\'+$version+'\x64')
 [IO.Directory]::CreateDirectory($out)|Out-Null
+$migrationWork=Join-Path $out 'r64-migration'
+& (Join-Path $PSScriptRoot 'build-r64-migration.ps1') -WixExe $wix -R64Msi $legacy -ToolchainBin $ToolchainBin -WorkDir $migrationWork
+$migrationPatch=Join-Path $migrationWork 'r64-migration.msp'
+if(-not (Test-Path -LiteralPath $migrationPatch -PathType Leaf)){throw 'R64 migration patch missing.'}
 $compiler=Join-Path (Resolve-Path -LiteralPath $ToolchainBin).Path 'g++.exe'
 $contextDll=Join-Path $out 'user-context.dll'
 $manifestHash=(Get-FileHash -LiteralPath (Join-Path $package 'manifest.json') -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -66,8 +72,8 @@ if($LASTEXITCODE -ne 0){throw 'Prototype MSI build failed.'}
 & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $repo 'native\tests\wix-product-layout-tests.ps1') -Msi $msi -Installable
 if($LASTEXITCODE -ne 0){throw 'Prototype MSI layout check failed.'}
 & (Join-Path $PSScriptRoot 'verify-msi-payload.ps1') -WixExe $wix -Msi $msi -SourceBundle $source -HistoryProbe $historyProbe -ActionDll $contextDll -ExtractDir (Join-Path $out 'msi-verification')
-& $wix build -arch x64 -ext $bal -d ("BundleVersion=$MsiVersion") -d ("IconPath=$icon") -d ("LicensePath=$(Join-Path $PSScriptRoot 'install-notice.rtf')") -d ("LogoPath=$(Join-Path $repo 'assets\liukai-installer-logo.png')") -d ("MsiPath=$msi") -o $setup (Join-Path $PSScriptRoot 'bundle.wxs')
+& $wix build -arch x64 -ext $bal -d ("BundleVersion=$MsiVersion") -d ("IconPath=$icon") -d ("LicensePath=$(Join-Path $PSScriptRoot 'install-notice.rtf')") -d ("LogoPath=$(Join-Path $repo 'assets\liukai-installer-logo.png')") -d ("MsiPath=$msi") -d ("R64Patch=$migrationPatch") -o $setup (Join-Path $PSScriptRoot 'bundle-migration.wxs')
 if($LASTEXITCODE -ne 0){throw 'Prototype Burn build failed.'}
-& (Join-Path $PSScriptRoot 'verify-bundle.ps1') -WixExe $wix -Bundle $setup -Msi $msi -Icon $icon -Logo (Join-Path $repo 'assets\liukai-installer-logo.png') -Notice (Join-Path $PSScriptRoot 'install-notice.rtf') -ExtractDir (Join-Path $out 'verification-extracted')
+& (Join-Path $PSScriptRoot 'verify-bundle.ps1') -WixExe $wix -Bundle $setup -Msi $msi -Patch $migrationPatch -Icon $icon -Logo (Join-Path $repo 'assets\liukai-installer-logo.png') -Notice (Join-Path $PSScriptRoot 'install-notice.rtf') -ExtractDir (Join-Path $out 'verification-extracted')
 if(-not $PublishBuild){$note='Test candidate only; do not distribute as a release.'; [IO.File]::WriteAllText((Join-Path $out 'TEST-ONLY.txt'),$note)}
 [pscustomobject]@{kind=if($PublishBuild){'wix-release'}else{'wix-test-candidate'};runtime_version=$version;msi=$msi;setup=$setup;installable=$true}|ConvertTo-Json

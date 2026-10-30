@@ -1,0 +1,18 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs" xmlns:bal="http://wixtoolset.org/schemas/v4/wxs/bal">
+  <!-- Burn is the user-facing EXE. The MSI remains the installation authority. -->
+  <Bundle Name="嘸．改" Manufacturer="LiuKai" Version="$(var.BundleVersion)"
+          UpgradeCode="94C1F608-8C0F-424C-A572-E0F4BCB10327"
+          IconSourceFile="$(var.IconPath)">
+    <BootstrapperApplication>
+      <bal:WixStandardBootstrapperApplication Theme="rtfLicense" LicenseFile="$(var.LicensePath)" LogoFile="$(var.LogoPath)" />
+    </BootstrapperApplication>
+    <Chain>
+      <MspPackage Id="R64Migration" SourceFile="$(var.R64Patch)" Permanent="yes">
+        <MsiProperty Name="MSIRESTARTMANAGERCONTROL" Value="DisableShutdown" />
+      </MspPackage>
+      <MsiPackage Id="LiuKaiMsi" SourceFile="$(var.MsiPath)">
+        <MsiProperty Name="LIUKAIBUNDLEUPGRADE" Value="1" />
+      </MsiPackage>
+    </Chain>
+  </Bundle>
+</Wix>
