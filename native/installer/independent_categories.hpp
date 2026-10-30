@@ -5,6 +5,8 @@
 #include <objbase.h>
 #include <vector>
 #include <string>
+#include <algorithm>
+#include <utility>
 #include <cstdint>
 #include <cstring>
 #include <cstdio>
@@ -14,6 +16,23 @@ inline const CLSID service = {0x5d7c4291,0x2b34,0x4ce8,{0x8a,0x11,0x39,0x62,0x71
 inline constexpr wchar_t child_argument[] = L"--liukai-internal-enum-categories";
 inline constexpr wchar_t caps_argument[] = L"--liukai-internal-profile-caps";
 inline constexpr wchar_t profile_argument[] = L"--liukai-internal-profile-present";
+// MSI custom actions run inside a Windows Installer host, not LiuKaiInstaller.
+// Override per thread only after the caller has validated the helper's path
+// and contents; ordinary CLI callers keep the existing self-executable path.
+// Trivially destructible TLS is essential in MSI custom-action DLLs: a
+// dynamically destroyed TLS string can re-enter MinGW's pthread cleanup while
+// the loader is detaching the DLL.
+inline thread_local const wchar_t* helper_executable_override=nullptr;
+struct ScopedHelperExecutable {
+    std::wstring value;
+    const wchar_t* previous;
+    explicit ScopedHelperExecutable(std::wstring validated):value(std::move(validated)),previous(helper_executable_override) {
+        helper_executable_override=value.c_str();
+    }
+    ~ScopedHelperExecutable(){helper_executable_override=previous;}
+    ScopedHelperExecutable(const ScopedHelperExecutable&)=delete;
+    ScopedHelperExecutable& operator=(const ScopedHelperExecutable&)=delete;
+};
 
 inline HRESULT read_profile_present_local(bool* present) {
     if(!present)return E_POINTER;
@@ -124,9 +143,16 @@ inline HRESULT read_child_data(const wchar_t* argument,std::vector<unsigned char
     if(!argument||!output)return E_POINTER;
     output->clear();
     std::vector<wchar_t> exe(32768);
-    DWORD length=GetModuleFileNameW(nullptr,exe.data(),static_cast<DWORD>(exe.size()));
-    if(!length||length>=exe.size())return HRESULT_FROM_WIN32(GetLastError()?GetLastError():ERROR_INSUFFICIENT_BUFFER);
-    std::wstring command=L"\""+std::wstring(exe.data(),length)+L"\" "+argument;
+    if(!helper_executable_override) {
+        DWORD length=GetModuleFileNameW(nullptr,exe.data(),static_cast<DWORD>(exe.size()));
+        if(!length||length>=exe.size())return HRESULT_FROM_WIN32(GetLastError()?GetLastError():ERROR_INSUFFICIENT_BUFFER);
+    } else {
+        const std::wstring value(helper_executable_override);
+        if(value.size()>=exe.size())return E_INVALIDARG;
+        std::copy(value.begin(),value.end(),exe.begin());
+        exe[value.size()]=L'\0';
+    }
+    std::wstring command=L"\""+std::wstring(exe.data())+L"\" "+argument;
     SECURITY_ATTRIBUTES security{sizeof(security),nullptr,TRUE};
     HANDLE read_pipe=nullptr,write_pipe=nullptr;
     if(!CreatePipe(&read_pipe,&write_pipe,&security,4096))return HRESULT_FROM_WIN32(GetLastError());

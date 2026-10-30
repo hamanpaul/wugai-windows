@@ -1,0 +1,13 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs" xmlns:bal="http://wixtoolset.org/schemas/v4/wxs/bal">
+  <!-- Burn is the user-facing EXE. The MSI remains the installation authority. -->
+  <Bundle Name="嘸．改" Manufacturer="LiuKai" Version="$(var.BundleVersion)"
+          UpgradeCode="94C1F608-8C0F-424C-A572-E0F4BCB10327"
+          IconSourceFile="$(var.IconPath)">
+    <BootstrapperApplication>
+      <bal:WixStandardBootstrapperApplication Theme="rtfLicense" LicenseFile="$(var.LicensePath)" LogoFile="$(var.LogoPath)" />
+    </BootstrapperApplication>
+    <Chain>
+      <MsiPackage Id="LiuKaiMsi" SourceFile="$(var.MsiPath)" />
+    </Chain>
+  </Bundle>
+</Wix>

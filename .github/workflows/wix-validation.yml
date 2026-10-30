@@ -1,0 +1,140 @@
+name: WiX development validation (no release)
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate-wix-prototype:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: msys2/setup-msys2@v2
+        id: msys
+        with:
+          msystem: MINGW64
+          install: mingw-w64-x86_64-gcc mingw-w64-x86_64-binutils
+      - name: Acquire and verify official WiX 6.0.2
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $tools = Join-Path $pwd 'build\toolchain'
+          New-Item -ItemType Directory -Path $tools -Force | Out-Null
+          gh release download v6.0.2 --repo wixtoolset/wix --pattern 'wix-cli-x64.msi' --dir $tools
+          if ($LASTEXITCODE -ne 0) { throw 'WiX download failed.' }
+          $msi = Join-Path $tools 'wix-cli-x64.msi'
+          if ((Get-FileHash -LiteralPath $msi -Algorithm SHA256).Hash.ToLowerInvariant() -cne 'a8a5cc7443353cef3ab900c60cd7a3a5ee601746319d104ac7b12ad0ced2345c') { throw 'Unexpected WiX MSI hash.' }
+          $extract = Join-Path $tools 'wix6-extracted'
+          New-Item -ItemType Directory -Path $extract | Out-Null
+          $p = Start-Process msiexec.exe -ArgumentList @('/a', ('"'+$msi+'"'), '/qn', ('TARGETDIR="'+$extract+'"')) -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "WiX extraction failed: $($p.ExitCode)" }
+          $wix = Join-Path $extract 'PFiles64\WiX Toolset v6.0\bin\wix.exe'
+          Push-Location $tools
+          try { & $wix extension add 'WixToolset.Bal.wixext/6.0.2'; if ($LASTEXITCODE -ne 0) { throw 'Burn extension download failed.' } }
+          finally { Pop-Location }
+          "WIX_EXE=$wix" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "WIX_BAL=$(Join-Path $tools '.wix\extensions\WixToolset.Bal.wixext\6.0.2\wixext6\WixToolset.BootstrapperApplications.wixext.dll')" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+      - name: Run legacy safety unit tests
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          foreach ($name in @('wix-legacy-recovery-policy-tests.ps1','wix-legacy-recovery-transaction-tests.ps1','wix-legacy-recovery-backup-tests.ps1','wix-legacy-recovery-registry-tests.ps1','wix-legacy-recovery-adapter-tests.ps1','wix-legacy-owner-marker-tests.ps1')) {
+            & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path 'native\tests' $name)
+            if ($LASTEXITCODE -ne 0) { throw "Safety test failed: $name" }
+          }
+      - name: Validate MSI user and system context probe authoring
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $bin = Join-Path '${{ steps.msys.outputs.msys2-location }}' 'mingw64\bin'
+          $env:PATH = $bin + ';' + $env:PATH
+          $work = Join-Path $pwd 'build\context-probe'
+          New-Item -ItemType Directory -Path $work -Force | Out-Null
+          $dll = Join-Path $work 'context-probe.dll'
+          & (Join-Path $bin 'g++.exe') -std=c++17 -O2 -static -shared 'native\wix\context-probe.cpp' -lmsi -ladvapi32 -o $dll
+          if ($LASTEXITCODE -ne 0) { throw 'Context probe compilation failed.' }
+          $fixture = Join-Path $work 'fixture.txt'
+          [IO.File]::WriteAllText($fixture, 'Read-only fixture')
+          $msi = Join-Path $work 'context-disabled.msi'
+          & $env:WIX_EXE build -arch x64 -d ("FixtureFile=$fixture") -d ("ProbeDll=$dll") -o $msi 'native\wix\context-probe.wxs'
+          if ($LASTEXITCODE -ne 0) { throw 'Context probe MSI build failed.' }
+          & $env:WIX_EXE msi validate $msi
+          if ($LASTEXITCODE -ne 0) { throw 'Context probe MSI validation failed.' }
+          & powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'native\tests\wix-context-probe-tests.ps1' -Msi $msi
+          if ($LASTEXITCODE -ne 0) { throw 'Context probe MSI table test failed.' }
+      - name: Test MSI fresh registration transaction
+        shell: pwsh
+        run: |
+          $bin = Join-Path '${{ steps.msys.outputs.msys2-location }}' 'mingw64\bin'
+          $env:PATH = $bin + ';' + $env:PATH
+          $test = Join-Path $pwd 'build\context-probe\fresh-registration-tests.exe'
+          New-Item -ItemType Directory -Path 'build\tests' -Force | Out-Null
+          & (Join-Path $bin 'g++.exe') -std=c++17 -O2 -static 'native\tests\wix-fresh-registration-tests.cpp' -lbcrypt -o $test
+          if ($LASTEXITCODE -ne 0) { throw 'Registration test compilation failed.' }
+          & $test
+          if ($LASTEXITCODE -ne 0) { throw 'Fresh registration test failed.' }
+          $modernTest = Join-Path $pwd 'build\tests\wix-modern-categories-tests.exe'
+          & (Join-Path $bin 'g++.exe') -std=c++17 -O2 -static 'native\tests\wix-modern-categories-tests.cpp' -lole32 -luuid -ladvapi32 -lbcrypt -o $modernTest
+          if ($LASTEXITCODE -ne 0) { throw 'Modern category test compilation failed.' }
+          & $modernTest
+          if ($LASTEXITCODE -ne 0) { throw 'Modern category test failed.' }
+          $integratedTest = Join-Path $pwd 'build\tests\wix-integrated-lifecycle-tests.exe'
+          & (Join-Path $bin 'g++.exe') -std=c++17 -O2 -static 'native\tests\wix-integrated-lifecycle-tests.cpp' -lole32 -luuid -ladvapi32 -lbcrypt -lshlwapi -o $integratedTest
+          if ($LASTEXITCODE -ne 0) { throw 'Integrated lifecycle test compilation failed.' }
+          & $integratedTest
+          if ($LASTEXITCODE -ne 0) { throw 'Integrated lifecycle test failed.' }
+          $rootTest = Join-Path $pwd 'build\tests\wix-fresh-root-tests.exe'
+          & (Join-Path $bin 'g++.exe') -std=c++17 -O2 -static 'native\tests\wix-fresh-root-tests.cpp' -o $rootTest
+          if ($LASTEXITCODE -ne 0) { throw 'Fresh root test compilation failed.' }
+          & $rootTest
+          if ($LASTEXITCODE -ne 0) { throw 'Fresh root test failed.' }
+          & powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'native\tests\wix-tls-detach-tests.ps1' -ToolchainBin $bin -WorkDir "$pwd\build\tls-detach-test"
+          if ($LASTEXITCODE -ne 0) { throw 'TLS detach test failed.' }
+      - name: Run release and homophone regressions
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $toolchain = Join-Path '${{ steps.msys.outputs.msys2-location }}' 'mingw64\bin'
+          $env:PATH = $toolchain + ';' + $env:PATH
+          & .\native\test-release.ps1 -ToolchainBin $toolchain -WorkDir "$pwd\build\release-tests"
+          if ($LASTEXITCODE -ne 0) { throw 'Release regression tests failed.' }
+      - name: Build current source components
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory -Path dist -Force | Out-Null
+          $toolchain = Join-Path '${{ steps.msys.outputs.msys2-location }}' 'mingw64\bin'
+          $env:PATH = $toolchain + ';' + $env:PATH
+          & .\native\build-fresh-release.ps1 -ToolchainBin $toolchain -Version '0.0.0-dev.wix-ci.x64' -OutputDir "$pwd\dist\source-fixture" -SetupName 'WuGai-R64-x64-Setup.exe'
+      - name: Build and verify non-installable MSI and Burn prototype
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $toolchain = Join-Path '${{ steps.msys.outputs.msys2-location }}' 'mingw64\bin'
+          $env:PATH = $toolchain + ';' + $env:PATH
+          & .\native\wix\build-disabled-prototype.ps1 -WixExe $env:WIX_EXE -BalExtension $env:WIX_BAL -SourceBundle "$pwd\dist\source-fixture\bundle" -OutputDir "$pwd\dist\wix-prototype" -ToolchainBin $toolchain
+      - name: Build and verify installable WiX test candidate
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $toolchain = Join-Path '${{ steps.msys.outputs.msys2-location }}' 'mingw64\bin'
+          $env:PATH = $toolchain + ';' + $env:PATH
+          & .\native\wix\build-installer.ps1 -WixExe $env:WIX_EXE -BalExtension $env:WIX_BAL -SourceBundle "$pwd\dist\source-fixture\bundle" -OutputDir "$pwd\dist\wix-test-candidate" -ToolchainBin $toolchain
+      - name: Test early failure diagnostics and staging cleanup
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $toolchain = Join-Path '${{ steps.msys.outputs.msys2-location }}' 'mingw64\bin'
+          $env:PATH = $toolchain + ';' + $env:PATH
+          & .\native\tests\wix-early-collector-tests.ps1 -ToolchainBin $toolchain -WorkDir "$pwd\build\early-diagnostic-test" -Msi "$pwd\dist\wix-test-candidate\LiuKai.msi" -ExpectedScript "$pwd\native\collect-install-diagnostics.ps1"
+          if ($LASTEXITCODE -ne 0) { throw 'Early diagnostics test failed.' }
+      - name: Preserve test candidate
+        uses: actions/upload-artifact@v4
+        with:
+          name: wix-test-candidate
+          path: |
+            dist/wix-test-candidate/LiuKai-win-setup.exe
+            dist/wix-test-candidate/LiuKai.msi
+            dist/wix-test-candidate/TEST-ONLY.txt
+          if-no-files-found: error

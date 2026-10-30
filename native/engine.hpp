@@ -171,7 +171,8 @@ public:
             break;
         case Key::Space:
             if(query_==QueryStage::PhoneticInput) open_phonetic(true);
-            else if(query_==QueryStage::Homophones||query_==QueryStage::PhoneticCandidates)refresh();
+            else if(query_==QueryStage::Homophones)return this->key(Key::PageDown);
+            else if(query_==QueryStage::PhoneticCandidates)refresh();
             else if (query_!=QueryStage::None) select(0, true);
             else if (!run_command()&&!open_related_after_seed()) select(0, true);
             break;
@@ -634,7 +635,10 @@ private:
         if (!starts.empty() && at < end) {
             const auto text=all[at].text;
             if(query_==QueryStage::HomophoneSeed){open_homophones(text);return;}
-            if(query_==QueryStage::Homophones||query_==QueryStage::PhoneticCandidates){
+            if(query_==QueryStage::Homophones){
+                outcome_.commit=text;composition_.clear();clear_query();page_=0;refresh();return;
+            }
+            if(query_==QueryStage::PhoneticCandidates){
                 preview_=text;query_hint(text);
                 query_preview_codes_=query_preview_codes(text);
                 refresh();return;

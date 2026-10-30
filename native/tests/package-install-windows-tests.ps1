@@ -58,6 +58,14 @@ Require ($astErrors.Count -eq 0) 'wrapper source parse failed'
 $validator = $wrapperAst.Find({param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -ceq 'Assert-MachineComCliStatus'},$false)
 Require ($null -ne $validator) 'machine CLI report validator missing'
 . ([scriptblock]::Create($validator.Extent.Text))
+$exitValidator = $wrapperAst.Find({param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -ceq 'Assert-MachineComCliExit'},$false)
+Require ($null -ne $exitValidator) 'machine CLI exit validator missing'
+. ([scriptblock]::Create($exitValidator.Extent.Text))
+Assert-MachineComCliExit 0 'status ok'
+$failureMessage = ''
+try { Assert-MachineComCliExit 1 'TSF managers unavailable' } catch { $failureMessage = $_.Exception.Message }
+Require ($failureMessage -match 'exit 1' -and $failureMessage -match 'TSF managers unavailable' -and
+    $failureMessage -match 'deployment has not started') 'failed status must preserve CLI exit and diagnostic output'
 $goodResource = [pscustomobject]@{name='com-machine-x64';scope='machine';hive='HKLM';registry_view=64;read_result=0;present=$false}
 Assert-MachineComCliStatus ([pscustomobject]@{resources=@($goodResource)})
 $script:passed++

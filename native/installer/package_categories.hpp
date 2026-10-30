@@ -27,6 +27,7 @@ public:
     virtual ~Store()=default;
     virtual HRESULT read(Categories*)=0;
     virtual HRESULT remove(const GUID&)=0;
+    virtual HRESULT add(const GUID&){return E_NOTIMPL;}
 };
 inline HRESULT capture(Store& store,Categories* out) {
     if(!out)return E_POINTER;
@@ -85,6 +86,11 @@ public:
         if(ready_!=S_OK)return ready_;
         if(!extra(id))return E_INVALIDARG;
         return manager_->UnregisterCategory(service,id,service);
+    }
+    HRESULT add(const GUID& id) override {
+        if(ready_!=S_OK)return ready_;
+        if(!extra(id))return E_INVALIDARG;
+        return manager_->RegisterCategory(service,id,service);
     }
 };
 }

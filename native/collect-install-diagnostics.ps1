@@ -3,7 +3,11 @@
 param(
     [string]$OutputDirectory = (Get-Location).Path,
     [string]$InstallRoot,
-    [string]$InstallerPath
+    [string]$InstallerPath,
+    [string]$MsiLog,
+    [string]$BundleLog,
+    [string]$FailureStage,
+    [string]$FailureHResult
 )
 $ErrorActionPreference = 'Stop'
 $issues = New-Object 'System.Collections.Generic.List[string]'
@@ -66,6 +70,10 @@ if (Test-Path -LiteralPath $logs -PathType Container) {
         Copy-Evidence $_.FullName ('logs\' + $_.Name)
     }
 }
+# WiX supplies explicit logs for the transaction that failed. Treat log paths
+# as data and copy only the specified files, under fixed names in the archive.
+if ($MsiLog) { if (Test-Path -LiteralPath $MsiLog -PathType Leaf) { Copy-Evidence ([IO.Path]::GetFullPath($MsiLog)) 'logs\wix-msi.log' } else { $issues.Add('Specified MSI log was unavailable.') } }
+if ($BundleLog) { if (Test-Path -LiteralPath $BundleLog -PathType Leaf) { Copy-Evidence ([IO.Path]::GetFullPath($BundleLog)) 'logs\wix-bundle.log' } else { $issues.Add('Specified Burn log was unavailable.') } }
 Copy-Evidence (Join-Path $InstallRoot '.liukai-install-state') 'installed\install-state.txt'
 Copy-Evidence (Join-Path $InstallRoot 'manifest.json') 'installed\manifest.json'
 $identities = @(File-Identity (Join-Path $InstallRoot 'LiuKaiInstaller.exe'); File-Identity (Join-Path $InstallRoot 'shared\branding.dll'))
@@ -149,7 +157,6 @@ try {
     Write-Json @($events) 'defender-events.json'
 } catch { $issues.Add("Defender events: $($_.Exception.Message)") }
 Write-Json ($inventory.ToArray()) 'evidence-files.json'
-Write-Json ($issues.ToArray()) 'collection-issues.json'
 # Summarize observed lifecycle results without claiming an unproven root cause.
 function Format-HResult($Value) {
     if ($null -eq $Value) { return $null }
@@ -169,9 +176,27 @@ if (Test-Path -LiteralPath $copiedLogs -PathType Container) {
         }
     }
 }
+$wixObservations = New-Object 'System.Collections.Generic.List[object]'
+$wixActionFailures = New-Object 'System.Collections.Generic.List[object]'
+if ($FailureStage -or $FailureHResult) {
+    if ($FailureStage -cnotmatch '^[A-Za-z0-9-]+$' -or $FailureHResult -cnotmatch '^[0-9]{1,10}$') { $issues.Add('Invalid explicit failure information.') }
+    else { $wixObservations.Add([pscustomobject]@{stage=$FailureStage; hresult=(Format-HResult $FailureHResult)}) }
+}
+$wixLog = Join-Path $report 'logs\wix-msi.log'
+if (Test-Path -LiteralPath $wixLog -PathType Leaf) {
+    foreach ($line in @(Get-Content -LiteralPath $wixLog -ErrorAction Stop)) {
+        if ($line -match 'LiuKai registration: ([A-Za-z0-9-]+) HRESULT=([0-9]+)') {
+            $wixObservations.Add([pscustomobject]@{stage=$Matches[1]; hresult=(Format-HResult $Matches[2])})
+        }
+        if ($line -match 'CustomAction ([A-Za-z0-9_]+) returned actual error code ([0-9]+)') {
+            $wixActionFailures.Add([pscustomobject]@{action=$Matches[1]; error_code=[uint32]$Matches[2]})
+        }
+    }
+}
 $transactionCopies = @($inventory | Where-Object { $_.copy -match '^transactions\\' }).Count
+Write-Json ($issues.ToArray()) 'collection-issues.json'
 Write-Json ([ordered]@{format='wugai-diagnostics-summary-v1'; lifecycle_observations=$observations.ToArray();
-    transaction_evidence_files=$transactionCopies; collection_issue_count=$issues.Count;
+    transaction_evidence_files=$transactionCopies; wix_registration_failures=$wixObservations.ToArray(); wix_action_failures=$wixActionFailures.ToArray(); collection_issue_count=$issues.Count;
     note='Observed results only; absent evidence or an error code does not establish a root cause.'}) 'diagnosis.json'
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 $archive = $report + '.zip'

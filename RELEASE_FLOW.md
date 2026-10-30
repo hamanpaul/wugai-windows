@@ -1,5 +1,7 @@
 # Windows x64 release flow
 
+> **WiX 遷移狀態**：目前工作樹正將發行流程改為建置 `LiuKai.msi` 和 `LiuKai-win-setup.exe`。下方舊的 `WuGai-Rxx-x64-Setup.exe` 建置指令與診斷 ZIP 說明僅適用舊安裝器，不能用來驗證 WiX 包。WiX 包的來源建置、MSI／EXE、logo 與安裝說明核對由 `native/wix/build-installer.ps1` 執行；安裝失敗的 Windows Installer 日誌預設位於 `%TEMP%`，符合條件的 MSI 失敗會嘗試自動收集 ZIP；可驗證的孤立舊版登錄殘留會先備份再清理，其餘情況會停止。啟動程式失敗、禁用回復或收集程序本身失敗時，可能無法建立 ZIP。正式發行前需完成實機驗證。
+
 ## 原則
 
 - 發行內容從指定 Git commit、受版控的程式碼和 `assets/` 完整重建；不得把舊 release 的 DLL、工具或字表默默混入新包。記錄 commit、編譯器、版本及 SHA-256；雜湊供核對，不代表程式安全或已簽章。`SOURCE-MANIFEST.json` 是 R60 原始來源匯出的歷史紀錄，不代表新版本。

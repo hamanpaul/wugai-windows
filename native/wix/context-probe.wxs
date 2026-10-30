@@ -1,0 +1,18 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <!-- Diagnostic only. The false launch condition deliberately prevents installation. -->
+  <Package Name="LiuKai MSI context probe" Manufacturer="LiuKai" Version="1.0.0"
+           UpgradeCode="C55CE7A9-C19A-4B63-8678-ACB95CF18B7D" Scope="perMachine">
+    <Launch Condition="0" Message="Development diagnostic package is disabled." />
+    <MediaTemplate EmbedCab="yes" />
+    <StandardDirectory Id="ProgramFiles64Folder"><Directory Id="PROBEDIR" Name="LiuKaiMsiProbe"><Component Id="Fixture"><File Source="$(var.FixtureFile)" /></Component></Directory></StandardDirectory>
+    <Binary Id="ContextProbe" SourceFile="$(var.ProbeDll)" />
+    <CustomAction Id="ProbeImmediate" BinaryRef="ContextProbe" DllEntry="ProbeContext" Execute="immediate" Return="check" />
+    <CustomAction Id="ProbeUser" BinaryRef="ContextProbe" DllEntry="ProbeContext" Execute="deferred" Impersonate="yes" TerminalServerAware="yes" Return="check" />
+    <CustomAction Id="ProbeSystem" BinaryRef="ContextProbe" DllEntry="ProbeContext" Execute="deferred" Impersonate="no" Return="check" />
+    <InstallExecuteSequence>
+      <Custom Action="ProbeImmediate" After="InstallInitialize" Condition="NOT Installed" />
+      <Custom Action="ProbeUser" After="ProbeImmediate" Condition="NOT Installed" />
+      <Custom Action="ProbeSystem" After="ProbeUser" Condition="NOT Installed" />
+    </InstallExecuteSequence>
+  </Package>
+</Wix>
