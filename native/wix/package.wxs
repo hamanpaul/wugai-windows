@@ -4,7 +4,7 @@
            UpgradeCode="7E8341DC-CE5A-4A3A-A6BC-2C5E70FEFC39" Scope="perMachine">
     <Launch Condition="0" Message="This development MSI cannot install until TSF lifecycle and recovery are implemented." />
     <Launch Condition="NOT RollbackDisabled" Message="Windows Installer rollback must be enabled to install or remove 嘸．改." />
-    <Launch Condition="Installed OR NOT WIX_UPGRADE_DETECTED OR LIUKAIBUNDLEUPGRADE = &quot;1&quot;" Message="請使用 LiuKai-win-setup.exe 升級既有版本。" />
+    <Launch Condition="Installed OR NOT WIX_UPGRADE_DETECTED OR (LIUKAIBUNDLEUPGRADE = &quot;1&quot; AND LIUKAISAFEREMOVAL = &quot;1&quot;)" Message="請使用 LiuKai-win-setup.exe 升級既有版本。" />
     <MajorUpgrade DowngradeErrorMessage="A newer version of 嘸．改 is already installed." />
     <MediaTemplate EmbedCab="yes" />
     <Binary Id="UserContext" SourceFile="$(var.UserContextDll)" />
@@ -22,6 +22,7 @@
     <Property Id="LIUKAIRUNTIMEVERSION" Value="$(var.RuntimeVersion)" />
     <Property Id="MSIRESTARTMANAGERCONTROL" Value="DisableShutdown" />
     <Property Id="LIUKAIBUNDLEUPGRADE" Secure="yes" />
+    <Property Id="LIUKAISAFEREMOVAL" Secure="yes"><RegistrySearch Id="FindSafeRemoval" Root="HKLM" Key="Software\LiuKai\MSI\{7E8341DC-CE5A-4A3A-A6BC-2C5E70FEFC39}" Name="SafeRetire" Type="raw" Bitness="always64" /></Property>
     <Property Id="LIUKAIINSTALLTOKEN" Secure="yes"><RegistrySearch Id="FindInstallToken" Root="HKLM" Key="Software\LiuKai\MSI\{7E8341DC-CE5A-4A3A-A6BC-2C5E70FEFC39}" Name="Token" Type="raw" Bitness="always64" /></Property>
     <Property Id="LIUKAIINSTALLSID" Secure="yes"><RegistrySearch Id="FindInstallSid" Root="HKLM" Key="Software\LiuKai\MSI\{7E8341DC-CE5A-4A3A-A6BC-2C5E70FEFC39}" Name="Sid" Type="raw" Bitness="always64" /></Property>
     <CustomAction Id="CaptureUserContext" BinaryRef="UserContext" DllEntry="CaptureUserContext" Execute="immediate" Return="check" />
@@ -62,6 +63,7 @@
           <RegistryValue Root="HKLM" Key="Software\LiuKai\MSI\{7E8341DC-CE5A-4A3A-A6BC-2C5E70FEFC39}" Name="Sid" Value="[LIUKAIINSTALLSID]" Type="string" />
           <RegistryValue Root="HKLM" Key="Software\LiuKai\MSI\{7E8341DC-CE5A-4A3A-A6BC-2C5E70FEFC39}" Name="Version" Value="$(var.RuntimeVersion)" Type="string" />
           <RegistryValue Root="HKLM" Key="Software\LiuKai\MSI\{7E8341DC-CE5A-4A3A-A6BC-2C5E70FEFC39}" Name="ManifestSha256" Value="$(var.ManifestSha256)" Type="string" />
+          <RegistryValue Root="HKLM" Key="Software\LiuKai\MSI\{7E8341DC-CE5A-4A3A-A6BC-2C5E70FEFC39}" Name="SafeRetire" Value="1" Type="string" />
         </Component>
         <Component Id="InstallerCli"><File Id="InstallerCliFile" Source="$(var.PayloadRoot)\LiuKaiInstaller.exe" /></Component>
         <Component Id="RegistrationTool"><File Id="RegistrationToolFile" Source="$(var.RegistrationTool)" /></Component>

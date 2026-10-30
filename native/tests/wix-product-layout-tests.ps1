@@ -6,7 +6,7 @@ $view=$db.OpenView("SELECT ``Value`` FROM ``Property`` WHERE ``Property`` = 'MSI
 if(-not $rm -or $rm.StringData(1) -cne 'DisableShutdown'){throw 'Installer must not automatically shut down applications.'}
 if(-not $LegacyMigration){
   $view=$db.OpenView("SELECT ``Value`` FROM ``Property`` WHERE ``Property`` = 'SecureCustomProperties'");$view.Execute();$secure=$view.Fetch()
-  if(-not $secure -or 'LIUKAIBUNDLEUPGRADE' -cnotin $secure.StringData(1).Split(';')){throw 'Bundle upgrade property must be secure.'}
+  if(-not $secure -or 'LIUKAIBUNDLEUPGRADE' -cnotin $secure.StringData(1).Split(';') -or 'LIUKAISAFEREMOVAL' -cnotin $secure.StringData(1).Split(';')){throw 'Upgrade safety properties must be secure.'}
 }
 $view=$db.OpenView('SELECT `FileName` FROM `File`');$view.Execute();$actual=@()
 while($row=$view.Fetch()){$parts=$row.StringData(1).Split('|');$actual+= $parts[$parts.Length-1]}
@@ -15,7 +15,7 @@ if($actual.Count -ne $expected.Count -or @($actual|Select-Object -Unique).Count 
 foreach($name in $expected){if($name -cnotin $actual){throw "Expected MSI payload file missing: $name"}}
 $view=$db.OpenView('SELECT `Condition` FROM `LaunchCondition`');$view.Execute();$conditions=@()
 while($row=$view.Fetch()){$conditions += $row.StringData(1)}
-if($Installable){$expectedCount=if($LegacyMigration){3}else{4};if($conditions.Count -ne $expectedCount -or 'VersionNT64' -cnotin $conditions -or 'NOT WIX_DOWNGRADE_DETECTED' -cnotin $conditions -or 'NOT RollbackDisabled' -cnotin $conditions){throw 'Installable test package must require 64-bit Windows and rollback.'};if(-not $LegacyMigration -and 'Installed OR NOT WIX_UPGRADE_DETECTED OR LIUKAIBUNDLEUPGRADE = "1"' -cnotin $conditions){throw 'Direct MSI upgrades must require the bundle.'}}
+if($Installable){$expectedCount=if($LegacyMigration){3}else{4};if($conditions.Count -ne $expectedCount -or 'VersionNT64' -cnotin $conditions -or 'NOT WIX_DOWNGRADE_DETECTED' -cnotin $conditions -or 'NOT RollbackDisabled' -cnotin $conditions){throw 'Installable test package must require 64-bit Windows and rollback.'};if(-not $LegacyMigration -and 'Installed OR NOT WIX_UPGRADE_DETECTED OR (LIUKAIBUNDLEUPGRADE = "1" AND LIUKAISAFEREMOVAL = "1")' -cnotin $conditions){throw 'Direct MSI upgrades must require the bundle.'}}
 elseif('0' -cnotin $conditions){throw 'Development package must be blocked from installation until TSF and rollback are complete.'}
 $view=$db.OpenView('SELECT * FROM `CustomAction`');$view.Execute();$actions=@{}
 while($row=$view.Fetch()){$actions[$row.StringData(1)]=@($row.IntegerData(2),$row.StringData(3),$row.StringData(4))}
@@ -38,8 +38,9 @@ while($row=$view.Fetch()){
     $identity[$row.StringData(3)]=$row.StringData(4)
   }
 }
-if($identity.Count -ne 5 -or $identity['Owner'] -cne 'LiuKai-TSF-v1' -or $identity['Token'] -cne '[LIUKAIINSTALLTOKEN]' -or $identity['Sid'] -cne '[LIUKAIINSTALLSID]' -or $identity['ManifestSha256'] -cnotmatch '^[0-9a-f]{64}$' -or !$identity['Version']){throw 'Invalid MSI identity metadata.'}
+if($identity.Count -ne 6 -or $identity['SafeRetire'] -cne '1' -or $identity['Owner'] -cne 'LiuKai-TSF-v1' -or $identity['Token'] -cne '[LIUKAIINSTALLTOKEN]' -or $identity['Sid'] -cne '[LIUKAIINSTALLSID]' -or $identity['ManifestSha256'] -cnotmatch '^[0-9a-f]{64}$' -or !$identity['Version']){throw 'Invalid MSI identity metadata.'}
 $view=$db.OpenView('SELECT `Property`, `Signature_` FROM `AppSearch`');$view.Execute();$search=@{}
 while($row=$view.Fetch()){$search[$row.StringData(1)]=$row.StringData(2)}
 if($search['LIUKAIINSTALLTOKEN'] -cne 'FindInstallToken' -or $search['LIUKAIINSTALLSID'] -cne 'FindInstallSid'){throw 'Missing MSI identity lookups.'}
+if(-not $LegacyMigration -and $search['LIUKAISAFEREMOVAL'] -cne 'FindSafeRemoval'){throw 'Missing safe removal marker lookup.'}
 if($Installable){'product_layout_files_verified=25;installable_test_requires_x64=true'}else{'product_layout_files_verified=25;development_install_blocked=true'}

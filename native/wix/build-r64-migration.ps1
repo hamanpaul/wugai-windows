@@ -51,6 +51,7 @@ $db=$installer.OpenDatabase($updated,1)
 $condition='REMOVE="ALL"'
 $sql=@(
  "INSERT INTO ``Property`` (``Property``, ``Value``) VALUES ('MSIRESTARTMANAGERCONTROL', 'DisableShutdown')",
+ "INSERT INTO ``Registry`` (``Registry``, ``Root``, ``Key``, ``Name``, ``Value``, ``Component_``) VALUES ('LiuKaiSafeRetire', 2, 'Software\LiuKai\MSI\{7E8341DC-CE5A-4A3A-A6BC-2C5E70FEFC39}', 'SafeRetire', '1', 'InstallIdentity')",
  "INSERT INTO ``LaunchCondition`` (``Condition``, ``Description``) VALUES ('NOT RollbackDisabled', 'Windows Installer rollback must be enabled.')",
  "UPDATE ``InstallExecuteSequence`` SET ``Sequence`` = 2593 WHERE ``Action`` = 'CollectRemovalFailure'",
  "UPDATE ``InstallExecuteSequence`` SET ``Sequence`` = 2594 WHERE ``Action`` = 'UndoRemoval'",
