@@ -17,6 +17,20 @@ $view=$db.OpenView('SELECT `Condition` FROM `LaunchCondition`');$view.Execute();
 while($row=$view.Fetch()){$conditions += $row.StringData(1)}
 if($Installable){$expectedCount=if($LegacyMigration){3}else{4};if($conditions.Count -ne $expectedCount -or 'VersionNT64' -cnotin $conditions -or 'NOT WIX_DOWNGRADE_DETECTED' -cnotin $conditions -or 'NOT RollbackDisabled' -cnotin $conditions){throw 'Installable test package must require 64-bit Windows and rollback.'};if(-not $LegacyMigration -and 'Installed OR NOT WIX_UPGRADE_DETECTED OR (LIUKAIBUNDLEUPGRADE = "1" AND LIUKAISAFEREMOVAL = "1")' -cnotin $conditions){throw 'Direct MSI upgrades must require the bundle.'}}
 elseif('0' -cnotin $conditions){throw 'Development package must be blocked from installation until TSF and rollback are complete.'}
+if($Installable -and -not $LegacyMigration){
+  $installer=New-Object -ComObject WindowsInstaller.Installer;$session=$installer.OpenPackage($path,1)
+  $guard='Installed OR NOT WIX_UPGRADE_DETECTED OR (LIUKAIBUNDLEUPGRADE = "1" AND LIUKAISAFEREMOVAL = "1")'
+  $session.Property('Installed')='';$session.Property('WIX_UPGRADE_DETECTED')='{7ED30030-AC1F-4E13-87F8-5648D0B84C38}'
+  $session.Property('LIUKAIBUNDLEUPGRADE')='1';$session.Property('LIUKAISAFEREMOVAL')=''
+  if($session.EvaluateCondition($guard) -ne 0){throw 'Unverified old product must not upgrade.'}
+  $session.Property('LIUKAISAFEREMOVAL')='1'
+  if($session.EvaluateCondition($guard) -ne 1){throw 'Verified old product should upgrade through bundle.'}
+  $session.Property('LIUKAIBUNDLEUPGRADE')=''
+  if($session.EvaluateCondition($guard) -ne 0){throw 'Direct MSI must not upgrade an installed product.'}
+  $session.Property('WIX_UPGRADE_DETECTED')=''
+  if($session.EvaluateCondition($guard) -ne 1){throw 'Clean install should be allowed.'}
+}
+
 $view=$db.OpenView('SELECT * FROM `CustomAction`');$view.Execute();$actions=@{}
 while($row=$view.Fetch()){$actions[$row.StringData(1)]=@($row.IntegerData(2),$row.StringData(3),$row.StringData(4))}
 foreach($case in @(@('CollectInstallFailure',17729,'CollectFailure'),@('CollectRemovalFailure',17729,'CollectFailure'),@('CaptureUserContext',1),@('PrepareFreshRegistration',1),@('ValidateUserContext',17409),@('RollbackFresh',17665),@('RecoverLegacyOrphan',17409),@('RegisterFresh',17409),@('PrepareRemoval',1),@('UndoRemoval',17665),@('RemoveRegistration',17409),@('UndoRetireFiles',17665),@('RetireFiles',17409),@('CommitRetireFiles',17921))){
